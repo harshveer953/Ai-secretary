@@ -6,8 +6,7 @@ export const registerUser = async (userData) => {
     const {fullName, email, password, phone} = userData
 
     //Check if email already exists
-   
-    const existingUser = await User.findOne({email})
+      const existingUser = await User.findOne({email})
 
     
     if (existingUser) {
@@ -18,9 +17,7 @@ export const registerUser = async (userData) => {
     }
 
     // Create User 
-    
-
-    const user = await User.create({
+        const user = await User.create({
         fullName,
         email,
         password,
@@ -35,4 +32,47 @@ export const registerUser = async (userData) => {
     )
 
     return createdUser
+}
+
+export const loginUser = async (loginData) => {
+    const {email , password} = loginData
+
+    // Check if user exists
+    const user = await User.findOne({ email })
+
+    if (!user) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "Invalid email or password."
+        )
+    }
+
+    // Check password
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if (!isPasswordValid) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "Invalid email or password."
+        )
+    }
+
+    // Generate Tokens
+    const accessToken = user.generateAccessToken()
+    const refreshToken = user.generateRefreshToken()
+
+    // Save RefreshToken
+    user.refreshToken = refreshToken
+    await user.save({ validateBeforeSave: false })
+
+    // Remove sensitive fields
+    const loggedInUser = await User.findById(user._id).select(
+        "-password -refreshToken"
+    )
+
+    return{
+        user: loggedInUser,
+        accessToken,
+        refreshToken
+    }
 }

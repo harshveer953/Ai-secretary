@@ -1,6 +1,7 @@
 import User from "../users/user.schema.js"
 import ApiError from "../../shared/ApiError.js"
 import HTTP_STATUS from "../../constants/httpStatus.js"
+import asyncHandler from "../../shared/asyncHandler.js"
 
 export const registerUser = async (userData) => {
     const {fullName, email, password, phone} = userData
@@ -70,9 +71,25 @@ export const loginUser = async (loginData) => {
         "-password -refreshToken"
     )
 
+
     return{
         user: loggedInUser,
         accessToken,
         refreshToken
     }
 }
+
+  // LOGOUT
+
+  export const logoutUser = async (userId) => {
+    console.log("Received userId:", userId);
+    await User.findByIdAndUpdate(
+        userId,
+        {
+            refreshToken: null,
+        },
+        {
+            new: true,
+        }
+    )
+  }

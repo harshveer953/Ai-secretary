@@ -22,7 +22,7 @@ app.use(compression())
 app.use(cookieParser())
 
 app.use(morgan('dev'))
-
+app.use(cookieParser())
 
 
 

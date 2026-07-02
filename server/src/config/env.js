@@ -23,6 +23,7 @@ const config = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
   accessTokenExpiry: process.env.ACCESS_TOKEN_EXPIRY,
   refreshTokenExpiry: process.env.REFRESH_TOKEN_EXPIRY,
+  nodeEnv: process.env.NODE_ENV,
 };
 
 export default config;

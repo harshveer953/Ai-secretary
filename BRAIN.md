@@ -1,327 +1,160 @@
-# 🧠 AI Secretary - Project Brain
+# 🧠 AI Secretary - Brain.md
 
-## Project Name
+## 📅 Progress Log
 
-AI Secretary
+### ✅ Day 1
+- Project architecture setup
+- Express server setup
+- Environment configuration
+- MongoDB connection
+- Base folder structure
 
----
+### ✅ Day 2
+- Feature-based module structure
+- Shared utilities
+- Constants
+- Middlewares
+- Global error handling
+- API response & error classes
 
-# Vision
+### ✅ Day 3
+- User Schema
+- Authentication module structure
+- Zod validation
+- Register API
+- AsyncHandler implementation
 
-Build a production-ready AI Voice Secretary that can:
+### ✅ Day 4
+- Auth Service layer
+- Password hashing (bcrypt)
+- Register API completed
+- Validation middleware
+- Error handling improvements
 
-* Answer incoming phone calls
-* Talk naturally in Hindi, English & Hinglish
-* Qualify leads
-* Schedule meetings
-* Save call data
-* Trigger business automations
-* Notify the owner instantly
-* Work like a real personal secretary
+### ✅ Day 5
+- JWT Authentication
+- Access Token generation
+- Refresh Token generation
+- Login API
+- Refresh Token storage in MongoDB
+- Cookie configuration
 
----
+### ✅ Day 6
+- Authentication Middleware
+- Protected Routes
+- Current User API (`GET /auth/me`)
+- Authorization Header support (`Bearer Token`)
+- HTTP-only Cookie authentication
+- Logout API
+- Refresh Token removal from database
+- Cookie clearing on logout
+- Authentication flow debugging
+- Production-style JWT middleware
 
-# Tech Stack
+### ✅ Day 7 (Part 1)
 
-## Frontend
-
-* React.js (Vite)
-* Tailwind CSS
-* shadcn/ui
-
-## Backend
-
-* Node.js
-* Express.js
-* MongoDB
-* Mongoose
-
-## AI
-
-* OpenAI Realtime API
-
-## Voice
-
-* Twilio Voice
-
-## Automation
-
-* n8n
-
-## Notifications
-
-* Telegram Bot
-
-## Calendar
-
-* Google Calendar API
-
-## Email
-
-* Gmail API
-
-## Deployment
-
-* Vercel
-* Railway
-* MongoDB Atlas
+- Refresh Token API completed
+- Token Rotation implemented
+- Refresh Token verification
+- Refresh Token DB validation
+- New Access Token generation
+- Cookie refresh flow
+- Authentication module completed
 
 ---
 
-# Architecture
+# ✅ Current APIs
 
-Customer
+### Auth
+## Auth APIs
 
+- [x] Register
+- [x] Login
+- [x] Get Current User
+- [x] Logout
+- [x] Refresh Token
+
+---
+
+# 🗂 Current Project Structure
+
+Authentication Flow
+
+Register
 ↓
-
-Twilio Voice
-
+Login
 ↓
-
-Webhook (Express API)
-
+Generate Access Token
 ↓
-
-OpenAI Realtime
-
+Generate Refresh Token
 ↓
-
-Conversation
-
+Save Refresh Token (DB)
 ↓
-
-Lead Extraction
-
+Set HTTP-only Cookies
 ↓
-
-MongoDB
-
+Protected Routes
 ↓
-
-n8n
-
-↓
-
-Telegram / Email / Calendar
-
-↓
-
-React Dashboard
+Logout
 
 ---
 
-# Current Backend Architecture
+# 🔥 Tech Stack
 
-Feature-Based Architecture
-
-server/
-└── src/
-├── config/
-├── constants/
-├── middlewares/
-├── modules/
-├── routes/
-├── shared/
-├── utils/
-├── app.js
-└── server.js
-
----
-
-# Modules
-
-* Auth
-* Users
-* Calls
-* Contacts
-* Appointments
-* Dashboard
-* Settings
-* AI
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+- JWT
+- bcrypt
+- Zod
+- Cookie Parser
+- Helmet
+- Compression
+- Morgan
+- CORS
 
 ---
 
-# Shared Components
+# 📚 Concepts Learned
 
-* ApiResponse
-* ApiError
-* asyncHandler
-
----
-
-# Middleware
-
-* Helmet
-* CORS
-* Morgan
-* Compression
-* Cookie Parser
-* Not Found Handler
-* Global Error Handler
-
----
-
-# API Versioning
-
-/api/v1
-
-Example:
-
-GET /api/v1/health
+- Feature-based Architecture
+- MVC + Service Pattern
+- Express Middlewares
+- Global Error Handling
+- Custom API Response
+- Custom API Error
+- Password Hashing
+- JWT Authentication
+- Access vs Refresh Token
+- HTTP-only Cookies
+- Authentication Middleware
+- Protected Routes
+- Logout Flow
+- Debugging JWT Authentication
+- Authorization Header (`Bearer Token`)
 
 ---
 
-# MongoDB Collections
+# 🎯 Next Milestone
 
-* users
-* calls
-* contacts
-* appointments
-* notifications
-* settings
-
----
-
-# Development Rules
-
-* Feature-Based Architecture
-* Service Layer Pattern
-* ES Modules only
-* Clean Code
-* SOLID Principles
-* Reusable Components
-* Standard API Responses
-* Global Error Handling
-* No Hardcoded Secrets
-* Environment Variables Only
+- [ ] Refresh Token API
+- [ ] Token Rotation
+- [ ] Authorization (Role Based)
+- [ ] User Module
+- [ ] Contacts Module
+- [ ] Calls Module
+- [ ] Dashboard Module
+- [ ] AI Integration
 
 ---
 
-# Standard API Response
+# 💡 Important Learnings
 
-Success
-
-{
-"success": true,
-"statusCode": 200,
-"message": "Success",
-"data": {}
-}
-
-Error
-
-{
-"success": false,
-"statusCode": 400,
-"message": "Something went wrong"
-}
-
----
-
-# Completed ✅
-
-* Project Initialized
-* Express Server
-* MongoDB Connection
-* Environment Configuration
-* API Versioning
-* Health Route
-* Feature-Based Folder Structure
-* ApiResponse
-* ApiError
-* Async Handler
-* 404 Middleware
-* Global Error Middleware
-* GitHub Repository Created
-
----
-
-# Next Tasks
-
-* Environment Validation
-* Logger
-* Constants
-* Authentication Module
-* JWT Access Token
-* JWT Refresh Token
-* User Module
-
----
-
-# Future Roadmap
-
-## Phase 1
-
-Backend Foundation
-
-## Phase 2
-
-Authentication
-
-## Phase 3
-
-Twilio Voice Integration
-
-## Phase 4
-
-OpenAI Realtime Voice
-
-## Phase 5
-
-Call Recording & Transcript
-
-## Phase 6
-
-Lead Qualification
-
-## Phase 7
-
-n8n Automation
-
-## Phase 8
-
-Telegram Notifications
-
-## Phase 9
-
-Google Calendar Integration
-
-## Phase 10
-
-Email Automation
-
-## Phase 11
-
-React Dashboard
-
-## Phase 12
-
-Deployment
-
----
-
-# Final Goal
-
-A production-ready AI Secretary capable of handling business calls automatically using AI, Voice, Automation, and a modern MERN architecture.
-
----
-
-# Target Completion
-
-Start Date:
-28 June 2026
-
-Estimated MVP Completion:
-25–27 July 2026
-
----
-
-# Project Status
-
-Foundation Progress
-
-████████░░░░░░░░░░░░ 40%
-
-Overall Project
-
-██░░░░░░░░░░░░░░░░░░ 10%
+- Never trust client data.
+- Always verify JWT before accessing protected resources.
+- Store Refresh Token in database.
+- Never return password in API response.
+- Use Middleware for Authentication.
+- Controllers should remain thin.
+- Business logic belongs inside Services.
+- Clear cookies and revoke Refresh Token during logout.

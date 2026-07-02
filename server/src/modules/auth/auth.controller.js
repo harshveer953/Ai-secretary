@@ -3,7 +3,7 @@ import ApiResponse from "../../shared/ApiResponse.js";
 import HTTP_STATUS from "../../constants/httpStatus.js";
 import cookieOptions from "../../constants/cookieOptions.js";
 
-import { registerUser, loginUser, logoutUser } from "./auth.service.js";
+import { registerUser, loginUser, logoutUser ,refreshUserToken } from "./auth.service.js";
 
 // export const register = asyncHandler(async (req, res) => {
 //   const user = await registerUser(req.body);
@@ -68,8 +68,7 @@ export const getCurrentUser = asyncHandler(async (req,res) => {
 
  export const logout = asyncHandler(async (req, res) => {
 
-    console.log(req.user);
-console.log(req.user._id);
+   
       await logoutUser(req.user._id)
 
       return res
@@ -83,3 +82,26 @@ console.log(req.user._id);
         )
       )
  })
+
+
+    // Refresh Access Token
+
+    export const refreshAccessToken = asyncHandler(async (req, res) => {
+        const refreshToken = req.cookies?.refreshToken
+
+        const tokens = await refreshUserToken(refreshToken)
+
+        return res
+        .cookie("accessToken" , tokens.accessToken, cookieOptions)
+        .cookie("refreshToken", tokens.refreshToken, cookieOptions)
+        .status(HTTP_STATUS.OK)
+        .json(
+          new ApiResponse(
+            HTTP_STATUS.OK,
+            "Access token refreshed successfully.",
+            {
+              accessToken: tokens.accessToken,
+            }
+          )
+        )
+    })

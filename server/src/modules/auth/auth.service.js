@@ -1,3 +1,5 @@
+import jwt from "jsonwebtoken"
+import config from "../../config/env.js"
 import User from "../users/user.schema.js"
 import ApiError from "../../shared/ApiError.js"
 import HTTP_STATUS from "../../constants/httpStatus.js"
@@ -92,4 +94,71 @@ export const loginUser = async (loginData) => {
             new: true,
         }
     )
+  }
+
+  
+  // refresh user token
+
+  export const refreshUserToken = async(refreshToken) => {
+
+    if(!refreshToken) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "Refresh Token is Missing."
+        )
+    }
+
+    // jwt verify
+
+    let decoded 
+
+    try {
+        decoded = jwt.verify(
+            refreshToken,
+            config.jwtRefreshSecret
+        )
+    } catch (error) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "Invalid or expired refresh token."
+        )
+    }
+
+    // after jwt verify
+
+    const user = await User.findById(decoded.id).select(
+        "-password"
+    )
+
+    if (!user) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "User not Found."
+        )
+    }
+
+
+    // Security check
+
+    if (user.refreshToken !== refreshToken) {
+        throw new ApiError(
+            HTTP_STATUS.UNAUTHORIZED,
+            "Refresh token is invalid."
+        )
+    }
+
+    // Generate Tokens
+    const accessToken = user.generateAccessToken()
+    const newRefreshToken = user.generateRefreshToken()
+
+    user.refreshToken = newRefreshToken
+
+    await user.save({
+        validateBeforeSave: false,
+    })
+
+    return {
+        accessToken,
+        refreshToken: newRefreshToken,
+    }
   }

@@ -8,6 +8,7 @@ import userRoutes from "../modules/users/user.routes.js";
 import callRoutes from "../modules/calls/call.routes.js";
 import contactRoutes from "../modules/contacts/contact.routes.js";
 import dashboardRoutes from "../modules/dashboard/dashboard.routes.js";
+import appointmentRoutes from "../modules/appointments/appointment.routes.js"
 
 
 const router = Router()
@@ -19,5 +20,6 @@ router.use("/users", userRoutes);
 router.use("/calls", callRoutes);
 router.use("/contacts", contactRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/appointments", appointmentRoutes)
 
 export default router

@@ -2,7 +2,7 @@ import asyncHandler from "../../shared/asyncHandler.js"
 import ApiResponse from "../../shared/ApiResponse.js"
 import HTTP_STATUS from "../../constants/httpStatus.js"
 
-import { createAppointment, getAppointmentById, getMyAppointment, updateAppointment, deleteAppointment, updateAppointmentStatus, getUpcomingAppointments } from "./appointment.service.js"
+import { createAppointment, getAppointmentById, getMyAppointment, updateAppointment, deleteAppointment, updateAppointmentStatus, getUpcomingAppointments, getAppointmentStats } from "./appointment.service.js"
 
 
 export const create = asyncHandler(async (req,res) => {
@@ -115,3 +115,16 @@ export const getAll = asyncHandler(async (req,res) =>{
         )
     )
    })
+
+
+    export const stats = asyncHandler(async (req,res) => {
+        const stats = await getAppointmentStats(req.user._id)
+
+        return res.status(HTTP_STATUS.OK).json(
+            new ApiResponse(
+                HTTP_STATUS.OK,
+                "Appointment stats fetched successfully.",
+                stats
+            )
+        )
+    })

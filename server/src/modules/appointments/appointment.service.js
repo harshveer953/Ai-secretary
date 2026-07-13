@@ -1,9 +1,11 @@
 import mongoose from "mongoose"
 import Appointment from "./appointment.schema.js"
 import Contact from "../contacts/contact.schema.js"
+import Reminder from "../reminders/reminder.schema.js"
 
 import ApiError from "../../shared/ApiError.js"
 import HTTP_STATUS from "../../constants/httpStatus.js"
+
 
 
 export const createAppointment = async (
@@ -40,13 +42,34 @@ export const createAppointment = async (
      )
    }
 
-    // Create appointment
-    const appointment = await Appointment.create({
-        owner: ownerId,
-        ...appointmentData,
-    })
+  
+// Create appointment
+const appointment = await Appointment.create({
+  owner: ownerId,
+  ...appointmentData,
+});
 
-    return appointment
+// Reminder Time (30 min before appointment)
+const reminderTime = new Date(appointment.appointmentDate);
+
+const [hours, minutes] = appointment.appointmentTime
+  .split(":")
+  .map(Number);
+
+reminderTime.setHours(hours);
+reminderTime.setMinutes(minutes - 30);
+reminderTime.setSeconds(0);
+reminderTime.setMilliseconds(0);
+
+// Auto Create Reminder
+await Reminder.create({
+  owner: ownerId,
+  appointment: appointment._id,
+  reminderType: "email",
+  reminderTime,
+});
+
+return appointment;
 }
 
 
@@ -286,4 +309,71 @@ export const updateAppointment = async (
     })
 
     return appointments
+ }
+
+ export const getAppointmentStats =async (ownerId) => {
+   const today = new Date()
+   today.setHours(0, 0, 0, 0)
+
+   const tomorrow = new Date(today)
+   tomorrow.setDate(tomorrow.getDate() + 1)
+
+   const [
+    total,
+    scheduled,
+    completed,
+    cancelled,
+    missed,
+    todayAppointments,
+    upcoming,
+   ] = await Promise.all([
+    Appointment.countDocuments({ owner: ownerId}),
+
+    Appointment.countDocuments({
+      owner: ownerId,
+      status: "scheduled",
+    }),
+
+        Appointment.countDocuments({
+      owner: ownerId,
+      status: "completed",
+    }),
+
+    Appointment.countDocuments({
+      owner: ownerId,
+      status: "cancelled",
+    }),
+
+    Appointment.countDocuments({
+      owner: ownerId,
+      status: "missed",
+    }),
+
+    Appointment.countDocuments({
+      owner: ownerId,
+      appointmentDate: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+    }),
+
+    Appointment.countDocuments({
+      owner: ownerId,
+      status: "scheduled",
+      appointmentDate: {
+        $gte: today,
+      },
+    }),
+
+   ])
+
+   return {
+    total,
+    scheduled,
+    completed,
+    cancelled,
+    missed,
+    today: todayAppointments,
+    upcoming,
+   }
  }

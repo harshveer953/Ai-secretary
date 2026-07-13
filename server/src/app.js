@@ -7,6 +7,7 @@ import morgan from 'morgan'
 import notFound from './middlewares/notFound.middleware.js'
 import errorHandler from './middlewares/error.middleware.js'
 
+
 // Routes
 import routes from "./routes/index.js"
 
@@ -19,7 +20,7 @@ app.use(express.urlencoded({ extended: true}))
 app.use(cors())
 app.use(helmet())
 app.use(compression())
-app.use(cookieParser())
+
 
 app.use(morgan('dev'))
 app.use(cookieParser())

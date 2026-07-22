@@ -10,7 +10,7 @@ import contactRoutes from "../modules/contacts/contact.routes.js";
 import dashboardRoutes from "../modules/dashboard/dashboard.routes.js";
 import appointmentRoutes from "../modules/appointments/appointment.routes.js"
 import reminderRoutes from "../modules/reminders/reminder.routes.js"
-
+import aiRoutes from "../modules/ai/ai.routes.js"
 
 
 const router = Router()
@@ -24,5 +24,6 @@ router.use("/contacts", contactRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/appointments", appointmentRoutes)
 router.use("/reminders", reminderRoutes)
+router.use("/ai", aiRoutes)
 
 export default router

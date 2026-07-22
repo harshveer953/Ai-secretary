@@ -6,10 +6,14 @@ import Call from "../calls/call.schema.js";
 
 import {
   createContact,
+  updateContact,
+  deleteContact,
 } from "../contacts/contact.service.js";
 
 import {
   createAppointment,
+  updateAppointment,
+  updateAppointmentStatus,
 } from "../appointments/appointment.service.js";
 
 import {
@@ -29,7 +33,7 @@ const groq = new Groq({
 const tools = [
 
   // ========================================
-  // CREATE APPOINTMENT TOOL
+  // CREATE APPOINTMENT
   // ========================================
 
   {
@@ -79,7 +83,7 @@ const tools = [
           duration: {
             type: "number",
             description:
-              "Appointment duration in minutes.",
+              "Appointment duration in minutes. Default is 30.",
           },
 
         },
@@ -96,7 +100,131 @@ const tools = [
 
 
   // ========================================
-  // CREATE CONTACT TOOL
+  // UPDATE APPOINTMENT
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "update_appointment",
+
+      description:
+        "Update, edit, reschedule, or change an existing appointment for the authenticated user. Use this only when the user explicitly asks to update or change an appointment.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the appointment.",
+          },
+
+          appointmentTitle: {
+            type: "string",
+            description:
+              "Current title of the appointment that should be updated.",
+          },
+
+          title: {
+            type: "string",
+            description:
+              "New title of the appointment, if provided.",
+          },
+
+          description: {
+            type: "string",
+            description:
+              "New description of the appointment, if provided.",
+          },
+
+          appointmentDate: {
+            type: "string",
+            description:
+              "New appointment date in YYYY-MM-DD format, if provided.",
+          },
+
+          appointmentTime: {
+            type: "string",
+            description:
+              "New appointment time in HH:mm 24-hour format, if provided.",
+          },
+
+          duration: {
+            type: "number",
+            description:
+              "New appointment duration in minutes, if provided.",
+          },
+
+          status: {
+            type: "string",
+            enum: [
+              "scheduled",
+              "completed",
+              "cancelled",
+              "missed",
+            ],
+            description:
+              "New appointment status, if provided.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+      },
+    },
+  },
+
+
+  // ========================================
+  // CANCEL APPOINTMENT
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "cancel_appointment",
+
+      description:
+        "Cancel an existing scheduled appointment for the authenticated user. Use this only when the user explicitly asks to cancel an appointment.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the appointment.",
+          },
+
+          appointmentTitle: {
+            type: "string",
+            description:
+              "Title of the appointment that should be cancelled.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+      },
+    },
+  },
+
+
+  // ========================================
+  // CREATE CONTACT
   // ========================================
 
   {
@@ -106,7 +234,7 @@ const tools = [
       name: "create_contact",
 
       description:
-        "Create a new contact for the authenticated user. Use this when the user explicitly asks to add, create, or save a new contact.",
+        "Create a new contact for the authenticated user. Use this only when the user explicitly asks to add, create, or save a contact.",
 
       parameters: {
         type: "object",
@@ -154,7 +282,106 @@ const tools = [
     },
   },
 
+
+  // ========================================
+  // UPDATE CONTACT
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "update_contact",
+
+      description:
+        "Update or edit an existing contact for the authenticated user. Use this only when the user explicitly asks to change or update contact information.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the existing contact that should be updated.",
+          },
+
+          fullName: {
+            type: "string",
+            description:
+              "New full name of the contact, if provided.",
+          },
+
+          phone: {
+            type: "string",
+            description:
+              "New phone number of the contact, if provided.",
+          },
+
+          email: {
+            type: "string",
+            description:
+              "New email address of the contact, if provided.",
+          },
+
+          company: {
+            type: "string",
+            description:
+              "New company name, if provided.",
+          },
+
+          designation: {
+            type: "string",
+            description:
+              "New job designation, if provided.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+        ],
+      },
+    },
+  },
+
+
+  // ========================================
+  // DELETE CONTACT
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "delete_contact",
+
+      description:
+        "Delete an existing contact for the authenticated user. Use this only when the user explicitly asks to delete or remove a contact.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact that should be deleted.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+        ],
+      },
+    },
+  },
+
 ];
+
 
 
 // ========================================
@@ -176,6 +403,10 @@ export const chatWithAI = async (
     calls,
   ] = await Promise.all([
 
+    // ========================================
+    // CONTACTS
+    // ========================================
+
     Contact.find({
       owner: ownerId,
     })
@@ -185,6 +416,10 @@ export const chatWithAI = async (
       .limit(20)
       .lean(),
 
+
+    // ========================================
+    // APPOINTMENTS
+    // ========================================
 
     Appointment.find({
       owner: ownerId,
@@ -199,6 +434,10 @@ export const chatWithAI = async (
       .limit(20)
       .lean(),
 
+
+    // ========================================
+    // CALLS
+    // ========================================
 
     Call.find({
       owner: ownerId,
@@ -222,13 +461,25 @@ export const chatWithAI = async (
 
   const userContext = `
 USER CONTACTS:
-${JSON.stringify(contacts, null, 2)}
+${JSON.stringify(
+  contacts,
+  null,
+  2
+)}
 
 USER APPOINTMENTS:
-${JSON.stringify(appointments, null, 2)}
+${JSON.stringify(
+  appointments,
+  null,
+  2
+)}
 
 USER CALLS:
-${JSON.stringify(calls, null, 2)}
+${JSON.stringify(
+  calls,
+  null,
+  2
+)}
 `;
 
 
@@ -241,6 +492,10 @@ ${JSON.stringify(calls, null, 2)}
 
       messages: [
 
+        // ========================================
+        // SYSTEM PROMPT
+        // ========================================
+
         {
           role: "system",
 
@@ -250,19 +505,48 @@ ${AI_SECRETARY_SYSTEM_PROMPT}
 CURRENT DATE:
 ${new Date().toISOString()}
 
-IMPORTANT:
+IMPORTANT RULES:
+
 - The authenticated user's ID is ${ownerId}.
-- You can answer questions using the user's data.
-- If the user explicitly asks you to create an appointment, use the create_appointment tool.
-- If the user explicitly asks you to create or add a contact, use the create_contact tool.
-- Never create an appointment or contact unless the user explicitly asks.
+- You can answer questions using the authenticated user's data.
+- Always respect the authenticated user's ownership.
+- Never access or modify another user's data.
+
+CONTACT RULES:
+
+- If the user explicitly asks to create, add, or save a contact, use create_contact.
+- If the user explicitly asks to update or edit a contact, use update_contact.
+- If the user explicitly asks to delete or remove a contact, use delete_contact.
+- Never create a contact unless explicitly requested.
+- Never update a contact unless explicitly requested.
+- Never delete a contact unless explicitly requested.
 - Never invent contact information.
-- If a required value is missing, ask the user for it.
+- If a required contact field is missing, ask the user for it.
+
+APPOINTMENT RULES:
+
+- If the user explicitly asks to create, schedule, or book an appointment, use create_appointment.
+- If the user explicitly asks to update, edit, reschedule, or change an appointment, use update_appointment.
+- If the user explicitly asks to cancel an appointment, use cancel_appointment.
+- Never create an appointment unless explicitly requested.
+- Never update an appointment unless explicitly requested.
+- Never cancel an appointment unless explicitly requested.
+- Never invent appointment information.
+- If a required appointment value is missing, ask the user for it.
+
+DATE AND TIME RULES:
+
 - Appointment date must be YYYY-MM-DD.
 - Appointment time must be HH:mm in 24-hour format.
+- If the user provides a relative date such as tomorrow or next Monday, convert it using the current date.
+- Default appointment duration is 30 minutes if not provided.
 `,
         },
 
+
+        // ========================================
+        // USER APPLICATION DATA
+        // ========================================
 
         {
           role: "system",
@@ -275,6 +559,10 @@ ${userContext}
         },
 
 
+        // ========================================
+        // USER MESSAGE
+        // ========================================
+
         {
           role: "user",
 
@@ -286,19 +574,28 @@ ${userContext}
       model:
         "llama-3.3-70b-versatile",
 
-      temperature: 0.3,
+      temperature:
+        0.3,
 
-      max_tokens: 700,
+      max_tokens:
+        700,
 
       tools,
 
-      tool_choice: "auto",
+      tool_choice:
+        "auto",
 
     });
 
 
+  // ========================================
+  // AI MESSAGE
+  // ========================================
+
   const assistantMessage =
-    completion.choices[0].message;
+    completion
+      .choices[0]
+      .message;
 
 
   // ========================================
@@ -310,27 +607,36 @@ ${userContext}
     assistantMessage.tool_calls.length === 0
   ) {
 
-    return assistantMessage.content;
+    return (
+      assistantMessage.content ||
+      "I couldn't process your request."
+    );
 
   }
 
 
   // ========================================
-  // HANDLE TOOL CALL
+  // GET TOOL CALL
   // ========================================
 
   const toolCall =
-    assistantMessage.tool_calls[0];
+    assistantMessage
+      .tool_calls[0];
 
 
   const toolName =
-    toolCall.function.name;
+    toolCall
+      .function
+      .name;
 
 
   const args =
     JSON.parse(
-      toolCall.function.arguments
+      toolCall
+        .function
+        .arguments
     );
+
 
 
   // ========================================
@@ -349,11 +655,15 @@ ${userContext}
     const contact =
       await Contact.findOne({
 
-        owner: ownerId,
+        owner:
+          ownerId,
 
         fullName: {
-          $regex: args.contactName,
-          $options: "i",
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
         },
 
       });
@@ -380,6 +690,7 @@ Please make sure the contact exists before creating the appointment.
         ownerId,
 
         {
+
           contact:
             contact._id,
 
@@ -387,7 +698,8 @@ Please make sure the contact exists before creating the appointment.
             args.title,
 
           description:
-            args.description || "",
+            args.description ||
+            "",
 
           appointmentDate:
             new Date(
@@ -398,7 +710,8 @@ Please make sure the contact exists before creating the appointment.
             args.appointmentTime,
 
           duration:
-            args.duration || 30,
+            args.duration ||
+            30,
 
         }
 
@@ -424,6 +737,323 @@ A reminder has also been automatically created for this appointment.
   }
 
 
+
+  // ========================================
+  // UPDATE APPOINTMENT
+  // ========================================
+
+  if (
+    toolName ===
+    "update_appointment"
+  ) {
+
+    // ========================================
+    // FIND CONTACT
+    // ========================================
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    // ========================================
+    // FIND APPOINTMENT
+    // ========================================
+
+    const appointment =
+      await Appointment.findOne({
+
+        owner:
+          ownerId,
+
+        contact:
+          contact._id,
+
+        title: {
+          $regex:
+            args.appointmentTitle,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!appointment) {
+
+      return `
+I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
+`;
+
+    }
+
+
+    // ========================================
+    // PREPARE UPDATE DATA
+    // ========================================
+
+    const updateData = {};
+
+
+    if (
+      args.title !== undefined
+    ) {
+
+      updateData.title =
+        args.title;
+
+    }
+
+
+    if (
+      args.description !== undefined
+    ) {
+
+      updateData.description =
+        args.description;
+
+    }
+
+
+    if (
+      args.appointmentDate !== undefined
+    ) {
+
+      updateData.appointmentDate =
+        new Date(
+          args.appointmentDate
+        );
+
+    }
+
+
+    if (
+      args.appointmentTime !== undefined
+    ) {
+
+      updateData.appointmentTime =
+        args.appointmentTime;
+
+    }
+
+
+    if (
+      args.duration !== undefined
+    ) {
+
+      updateData.duration =
+        args.duration;
+
+    }
+
+
+    if (
+      args.status !== undefined
+    ) {
+
+      updateData.status =
+        args.status;
+
+    }
+
+
+    // ========================================
+    // CHECK UPDATE DATA
+    // ========================================
+
+    if (
+      Object.keys(updateData)
+        .length === 0
+    ) {
+
+      return `
+I found the appointment, but I couldn't determine what information you want to update.
+`;
+
+    }
+
+
+    // ========================================
+    // UPDATE APPOINTMENT
+    // ========================================
+
+    const updatedAppointment =
+      await updateAppointment(
+
+        appointment._id,
+
+        ownerId,
+
+        updateData
+
+      );
+
+
+    // ========================================
+    // SUCCESS RESPONSE
+    // ========================================
+
+    return `
+Appointment updated successfully.
+
+Title: ${updatedAppointment.title}
+Contact: ${contact.fullName}
+Date: ${new Date(
+  updatedAppointment.appointmentDate
+)
+  .toISOString()
+  .split("T")[0]}
+Time: ${updatedAppointment.appointmentTime}
+Duration: ${updatedAppointment.duration} minutes
+Status: ${updatedAppointment.status}
+
+The associated reminder has been automatically synchronized.
+`;
+
+  }
+
+
+
+  // ========================================
+  // CANCEL APPOINTMENT
+  // ========================================
+
+  if (
+    toolName ===
+    "cancel_appointment"
+  ) {
+
+    // ========================================
+    // FIND CONTACT
+    // ========================================
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    // ========================================
+    // FIND SCHEDULED APPOINTMENT
+    // ========================================
+
+    const appointment =
+      await Appointment.findOne({
+
+        owner:
+          ownerId,
+
+        contact:
+          contact._id,
+
+        title: {
+          $regex:
+            args.appointmentTitle,
+
+          $options:
+            "i",
+        },
+
+        status:
+          "scheduled",
+
+      });
+
+
+    if (!appointment) {
+
+      return `
+I couldn't find a scheduled appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
+`;
+
+    }
+
+
+    // ========================================
+    // CANCEL APPOINTMENT
+    //
+    // updateAppointmentStatus internally
+    // removes the associated reminder
+    // ========================================
+
+    const cancelledAppointment =
+      await updateAppointmentStatus(
+
+        appointment._id,
+
+        ownerId,
+
+        "cancelled"
+
+      );
+
+
+    // ========================================
+    // SUCCESS RESPONSE
+    // ========================================
+
+    return `
+Appointment cancelled successfully.
+
+Title: ${cancelledAppointment.title}
+Contact: ${contact.fullName}
+Date: ${new Date(
+  cancelledAppointment.appointmentDate
+)
+  .toISOString()
+  .split("T")[0]}
+Time: ${cancelledAppointment.appointmentTime}
+Status: ${cancelledAppointment.status}
+
+The associated reminder has also been removed.
+`;
+
+  }
+
+
+
   // ========================================
   // CREATE CONTACT
   // ========================================
@@ -440,7 +1070,8 @@ A reminder has also been automatically created for this appointment.
     const existingContact =
       await Contact.findOne({
 
-        owner: ownerId,
+        owner:
+          ownerId,
 
         $or: [
 
@@ -480,6 +1111,7 @@ Phone: ${existingContact.phone}
       await createContact(
 
         {
+
           fullName:
             args.fullName,
 
@@ -490,10 +1122,12 @@ Phone: ${existingContact.phone}
             args.email,
 
           company:
-            args.company || "",
+            args.company ||
+            "",
 
           designation:
-            args.designation || "",
+            args.designation ||
+            "",
 
         },
 
@@ -519,10 +1153,231 @@ Designation: ${contact.designation || "Not provided"}
   }
 
 
+
+  // ========================================
+  // UPDATE CONTACT
+  // ========================================
+
+  if (
+    toolName ===
+    "update_contact"
+  ) {
+
+    // ========================================
+    // FIND CONTACT
+    // ========================================
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    // ========================================
+    // PREPARE UPDATE DATA
+    // ========================================
+
+    const updateData = {};
+
+
+    if (
+      args.fullName !== undefined
+    ) {
+
+      updateData.fullName =
+        args.fullName;
+
+    }
+
+
+    if (
+      args.phone !== undefined
+    ) {
+
+      updateData.phone =
+        args.phone;
+
+    }
+
+
+    if (
+      args.email !== undefined
+    ) {
+
+      updateData.email =
+        args.email;
+
+    }
+
+
+    if (
+      args.company !== undefined
+    ) {
+
+      updateData.company =
+        args.company;
+
+    }
+
+
+    if (
+      args.designation !== undefined
+    ) {
+
+      updateData.designation =
+        args.designation;
+
+    }
+
+
+    // ========================================
+    // CHECK UPDATE DATA
+    // ========================================
+
+    if (
+      Object.keys(updateData)
+        .length === 0
+    ) {
+
+      return `
+I found the contact, but I couldn't determine what information you want to update.
+`;
+
+    }
+
+
+    // ========================================
+    // UPDATE CONTACT
+    // ========================================
+
+    const updatedContact =
+      await updateContact(
+
+        contact._id,
+
+        ownerId,
+
+        updateData
+
+      );
+
+
+    // ========================================
+    // SUCCESS RESPONSE
+    // ========================================
+
+    return `
+Contact updated successfully.
+
+Name: ${updatedContact.fullName}
+Phone: ${updatedContact.phone}
+Email: ${updatedContact.email}
+Company: ${updatedContact.company || "Not provided"}
+Designation: ${updatedContact.designation || "Not provided"}
+`;
+
+  }
+
+
+
+  // ========================================
+  // DELETE CONTACT
+  // ========================================
+
+  if (
+    toolName ===
+    "delete_contact"
+  ) {
+
+    // ========================================
+    // FIND CONTACT
+    // ========================================
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    // ========================================
+    // DELETE CONTACT
+    // ========================================
+
+    const deletedContact =
+      await deleteContact(
+
+        contact._id,
+
+        ownerId
+
+      );
+
+
+    // ========================================
+    // SUCCESS RESPONSE
+    // ========================================
+
+    return `
+Contact deleted successfully.
+
+Name: ${deletedContact.fullName}
+Phone: ${deletedContact.phone}
+Email: ${deletedContact.email}
+Company: ${deletedContact.company || "Not provided"}
+Designation: ${deletedContact.designation || "Not provided"}
+`;
+
+  }
+
+
+
   // ========================================
   // FALLBACK
   // ========================================
 
-  return assistantMessage.content;
+  return (
+    assistantMessage.content ||
+    "I couldn't process your request."
+  );
 
 };

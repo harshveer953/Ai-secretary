@@ -188,3 +188,98 @@ export const getMyCalls = async (
     );
   }
 };
+
+
+export const getCallStats = async (ownerId) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const [
+    total,
+    incoming,
+    outgoing,
+    answered,
+    missed,
+    rejected,
+    todayCalls,
+    duration,
+  ] = await Promise.all([
+    // Total Calls
+    Call.countDocuments({
+      owner: ownerId,
+    }),
+
+    // Incoming Calls
+    Call.countDocuments({
+      owner: ownerId,
+      callType: "incoming",
+    }),
+
+    // Outgoing Calls
+    Call.countDocuments({
+      owner: ownerId,
+      callType: "outgoing",
+    }),
+
+    // Answered Calls
+    Call.countDocuments({
+      owner: ownerId,
+      status: "answered",
+    }),
+
+    // Missed Calls
+    Call.countDocuments({
+      owner: ownerId,
+      status: "missed",
+    }),
+
+    // Rejected Calls
+    Call.countDocuments({
+      owner: ownerId,
+      status: "rejected",
+    }),
+
+    // Today's Calls
+    Call.countDocuments({
+      owner: ownerId,
+      startedAt: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+    }),
+
+    // Total Call Duration
+    Call.aggregate([
+      {
+        $match: {
+          owner: ownerId,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalDuration: {
+            $sum: "$duration",
+          },
+        },
+      },
+    ]),
+  ])
+
+  return {
+    total,
+    incoming,
+    outgoing,
+    answered,
+    missed,
+    rejected,
+    today: todayCalls,
+    totalDuration:
+      duration.length > 0
+        ? duration[0].totalDuration
+        : 0,
+  }
+}

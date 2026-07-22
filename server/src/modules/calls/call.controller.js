@@ -2,7 +2,7 @@ import asyncHandler from "../../shared/asyncHandler.js"
 import ApiResponse from "../../shared/ApiResponse.js"
 import HTTP_STATUS from "../../constants/httpStatus.js"
 
-import { createCall, getMyCalls, getCallById, updateCall, deleteCall } from "./call.service.js"
+import { createCall, getMyCalls, getCallById, updateCall, deleteCall, getCallStats } from "./call.service.js"
 import { ca } from "zod/v4/locales"
 
 export const create = asyncHandler(async (req,res) => {
@@ -85,3 +85,18 @@ export const remove = asyncHandler(async (req, res) => {
     )
   );
 });
+
+
+export const stats = asyncHandler(async (req,res) => {
+    const data = await getCallStats(
+        req.user._id,
+    )
+
+    return res.status(HTTP_STATUS.OK).json(
+        new ApiResponse(
+            HTTP_STATUS.OK,
+            "Call stats fetched successfully.",
+            data
+        )
+    )
+})

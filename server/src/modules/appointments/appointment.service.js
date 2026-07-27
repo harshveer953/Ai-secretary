@@ -7,48 +7,22 @@ import HTTP_STATUS from "../../constants/httpStatus.js";
 
 
 // ========================================
-// HELPER
-// CREATE / UPDATE REMINDER
+// REMINDER HELPERS
 // ========================================
 
-const syncAppointmentReminder = async (
-  appointment,
-  ownerId
+const calculateReminderTime = (
+  appointmentDate,
+  appointmentTime
 ) => {
 
-  // ========================================
-  // ONLY SCHEDULED APPOINTMENTS NEED REMINDER
-  // ========================================
-
-  if (appointment.status !== "scheduled") {
-
-    await Reminder.deleteOne({
-      appointment: appointment._id,
-      owner: ownerId,
-    });
-
-    return;
-
-  }
-
-
-  // ========================================
-  // CALCULATE REMINDER TIME
-  // 30 MINUTES BEFORE APPOINTMENT
-  // ========================================
-
   const reminderTime =
-    new Date(
-      appointment.appointmentDate
-    );
-
+    new Date(appointmentDate);
 
   const [
     hours,
     minutes,
   ] =
-    appointment
-      .appointmentTime
+    appointmentTime
       .split(":")
       .map(Number);
 
@@ -70,14 +44,30 @@ const syncAppointmentReminder = async (
   );
 
 
-  // ========================================
-  // FIND EXISTING REMINDER
-  // ========================================
+  return reminderTime;
+};
 
-  const existingReminder =
+
+// ========================================
+// CREATE OR UPDATE REMINDER
+// ========================================
+
+const syncAppointmentReminder = async (
+  ownerId,
+  appointment
+) => {
+
+  const reminderTime =
+    calculateReminderTime(
+      appointment.appointmentDate,
+      appointment.appointmentTime
+    );
+
+
+  const reminder =
     await Reminder.findOne({
-      appointment: appointment._id,
       owner: ownerId,
+      appointment: appointment._id,
     });
 
 
@@ -85,21 +75,20 @@ const syncAppointmentReminder = async (
   // UPDATE EXISTING REMINDER
   // ========================================
 
-  if (existingReminder) {
+  if (reminder) {
 
-    existingReminder.reminderTime =
+    reminder.reminderTime =
       reminderTime;
 
-    existingReminder.sent =
+    reminder.sent =
       false;
 
-    existingReminder.sentAt =
+    reminder.sentAt =
       null;
 
-    await existingReminder.save();
+    await reminder.save();
 
-    return existingReminder;
-
+    return reminder;
   }
 
 
@@ -109,7 +98,8 @@ const syncAppointmentReminder = async (
 
   return await Reminder.create({
 
-    owner: ownerId,
+    owner:
+      ownerId,
 
     appointment:
       appointment._id,
@@ -123,6 +113,27 @@ const syncAppointmentReminder = async (
 
 };
 
+
+// ========================================
+// DELETE APPOINTMENT REMINDER
+// ========================================
+
+const deleteAppointmentReminder = async (
+  ownerId,
+  appointmentId
+) => {
+
+  await Reminder.deleteOne({
+
+    owner:
+      ownerId,
+
+    appointment:
+      appointmentId,
+
+  });
+
+};
 
 
 // ========================================
@@ -153,8 +164,11 @@ export const createAppointment = async (
   if (!contact) {
 
     throw new ApiError(
+
       HTTP_STATUS.NOT_FOUND,
+
       "Contact not found."
+
     );
 
   }
@@ -162,6 +176,7 @@ export const createAppointment = async (
 
   // ========================================
   // CHECK TIME SLOT CONFLICT
+  // Only scheduled appointments block a slot
   // ========================================
 
   const existingAppointment =
@@ -171,9 +186,7 @@ export const createAppointment = async (
         ownerId,
 
       appointmentDate:
-        new Date(
-          appointmentData.appointmentDate
-        ),
+        appointmentData.appointmentDate,
 
       appointmentTime:
         appointmentData.appointmentTime,
@@ -187,8 +200,11 @@ export const createAppointment = async (
   if (existingAppointment) {
 
     throw new ApiError(
+
       HTTP_STATUS.CONFLICT,
+
       "Time slot already booked."
+
     );
 
   }
@@ -206,30 +222,37 @@ export const createAppointment = async (
 
       ...appointmentData,
 
+      status:
+        appointmentData.status ||
+        "scheduled",
+
     });
 
 
   // ========================================
   // CREATE REMINDER
+  // Only scheduled appointments need reminders
   // ========================================
 
-  await syncAppointmentReminder(
-    appointment,
-    ownerId
-  );
+  if (
+    appointment.status ===
+    "scheduled"
+  ) {
+
+    await syncAppointmentReminder(
+
+      ownerId,
+
+      appointment
+
+    );
+
+  }
 
 
-  // ========================================
-  // RETURN APPOINTMENT
-  // ========================================
-
-  return await appointment.populate(
-    "contact",
-    "fullName phone email company designation"
-  );
+  return appointment;
 
 };
-
 
 
 // ========================================
@@ -240,10 +263,6 @@ export const getMyAppointment = async (
   ownerId,
   query = {}
 ) => {
-
-  // ========================================
-  // QUERY PARAMETERS
-  // ========================================
 
   const {
 
@@ -262,16 +281,15 @@ export const getMyAppointment = async (
   } = query;
 
 
+  // ========================================
+  // PAGINATION
+  // ========================================
+
   const pageNumber =
     Number(page);
 
   const limitNumber =
     Number(limit);
-
-
-  // ========================================
-  // PAGINATION
-  // ========================================
 
   const skip =
     (pageNumber - 1) *
@@ -340,9 +358,7 @@ export const getMyAppointment = async (
   // ========================================
 
   const appointments =
-    await Appointment.find(
-      filter
-    )
+    await Appointment.find(filter)
 
       .populate(
         "contact",
@@ -396,14 +412,14 @@ export const getMyAppointment = async (
         total,
 
       hasPrevPage:
-        pageNumber > 1,
+        pageNumber >
+        1,
 
     },
 
   };
 
 };
-
 
 
 // ========================================
@@ -424,19 +440,23 @@ export const getAppointmentById = async (
       owner:
         ownerId,
 
-    })
+    }).populate(
 
-      .populate(
-        "contact",
-        "fullName phone email company designation"
-      );
+      "contact",
+
+      "fullName phone email company designation"
+
+    );
 
 
   if (!appointment) {
 
     throw new ApiError(
+
       HTTP_STATUS.NOT_FOUND,
+
       "Appointment not found."
+
     );
 
   }
@@ -445,7 +465,6 @@ export const getAppointmentById = async (
   return appointment;
 
 };
-
 
 
 // ========================================
@@ -464,32 +483,77 @@ export const updateAppointment = async (
 
   const existingAppointment =
     await Appointment.findOne({
-      _id: appointmentId,
-      owner: ownerId,
+
+      _id:
+        appointmentId,
+
+      owner:
+        ownerId,
+
     });
 
 
   if (!existingAppointment) {
 
     throw new ApiError(
+
       HTTP_STATUS.NOT_FOUND,
+
       "Appointment not found."
+
     );
 
   }
 
 
   // ========================================
-  // DETERMINE FINAL DATE & TIME
+  // CURRENT STATUS
   // ========================================
 
-  const appointmentDate =
-    updateData.appointmentDate ||
-    existingAppointment.appointmentDate;
+  const currentStatus =
+    existingAppointment.status;
 
-  const appointmentTime =
-    updateData.appointmentTime ||
-    existingAppointment.appointmentTime;
+
+  // ========================================
+  // REQUESTED STATUS
+  // ========================================
+
+  const requestedStatus =
+    updateData.status;
+
+
+  // ========================================
+  // TERMINAL STATUSES
+  // ========================================
+
+  const terminalStatuses = [
+
+    "cancelled",
+
+    "completed",
+
+    "missed",
+
+  ];
+
+
+  // ========================================
+  // CHECK DATE / TIME CHANGES
+  // ========================================
+
+  const hasDateChange =
+    updateData.appointmentDate !==
+    undefined;
+
+
+  const hasTimeChange =
+    updateData.appointmentTime !==
+    undefined;
+
+
+  const hasScheduleChange =
+    hasDateChange ||
+    hasTimeChange;
 
 
   // ========================================
@@ -497,34 +561,111 @@ export const updateAppointment = async (
   // ========================================
 
   const finalStatus =
-    updateData.status ||
-    existingAppointment.status;
+    requestedStatus !==
+    undefined
+
+      ? requestedStatus
+
+      : currentStatus;
+
+
+  // ========================================
+  // TERMINAL APPOINTMENT RULE
+  //
+  // cancelled/completed/missed appointments
+  // can ONLY be edited when rescheduling
+  // them back to scheduled.
+  // ========================================
+
+  if (
+    terminalStatuses.includes(
+      currentStatus
+    )
+  ) {
+
+    const isRescheduling =
+      finalStatus ===
+      "scheduled";
+
+
+    if (
+      !isRescheduling ||
+      !hasScheduleChange
+    ) {
+
+      throw new ApiError(
+
+        HTTP_STATUS.BAD_REQUEST,
+
+        `Cannot update an appointment with status "${currentStatus}". To reschedule it, provide a new appointment date and time and change the status to "scheduled".`
+
+      );
+
+    }
+
+  }
+
+
+  // ========================================
+  // CHECK NEW DATE
+  // ========================================
+
+  const appointmentDate =
+
+    hasDateChange
+
+      ? new Date(
+          updateData.appointmentDate
+        )
+
+      : existingAppointment.appointmentDate;
+
+
+  // ========================================
+  // CHECK NEW TIME
+  // ========================================
+
+  const appointmentTime =
+
+    hasTimeChange
+
+      ? updateData.appointmentTime
+
+      : existingAppointment.appointmentTime;
 
 
   // ========================================
   // CHECK TIME SLOT CONFLICT
+  //
+  // Only scheduled appointments block slots.
   // ========================================
 
-  // Only scheduled appointments should
-  // participate in time-slot conflicts.
-
-  if (finalStatus === "scheduled") {
+  if (
+    finalStatus ===
+    "scheduled"
+  ) {
 
     const conflictAppointment =
       await Appointment.findOne({
 
         _id: {
-          $ne: existingAppointment._id,
+
+          $ne:
+            existingAppointment._id,
+
         },
 
-        owner: ownerId,
+        owner:
+          ownerId,
 
         appointmentDate:
-          new Date(appointmentDate),
+          appointmentDate,
 
-        appointmentTime,
+        appointmentTime:
+          appointmentTime,
 
-        status: "scheduled",
+        status:
+          "scheduled",
 
       });
 
@@ -532,8 +673,11 @@ export const updateAppointment = async (
     if (conflictAppointment) {
 
       throw new ApiError(
+
         HTTP_STATUS.CONFLICT,
+
         "Time slot already booked."
+
       );
 
     }
@@ -546,8 +690,11 @@ export const updateAppointment = async (
   // ========================================
 
   Object.assign(
+
     existingAppointment,
+
     updateData
+
   );
 
 
@@ -555,157 +702,95 @@ export const updateAppointment = async (
 
 
   // ========================================
-  // HANDLE REMINDER
+  // STATUS CHANGED TO TERMINAL
+  //
+  // scheduled
+  //    ↓
+  // cancelled/completed/missed
+  //
+  // Delete reminder.
   // ========================================
 
-  // ----------------------------------------
-  // CASE 1:
-  // Appointment is NOT scheduled
-  // ----------------------------------------
-
   if (
-    existingAppointment.status !==
-    "scheduled"
+
+    currentStatus ===
+      "scheduled" &&
+
+    terminalStatuses.includes(
+      finalStatus
+    )
+
   ) {
 
-    // Cancelled / Completed / Missed
-    // appointments should not have reminders.
+    await deleteAppointmentReminder(
 
-    await Reminder.deleteOne({
+      ownerId,
 
-      appointment:
-        existingAppointment._id,
+      existingAppointment._id
 
-      owner:
-        ownerId,
-
-    });
+    );
 
   }
 
 
-  // ----------------------------------------
-  // CASE 2:
-  // Appointment is scheduled
-  // ----------------------------------------
+  // ========================================
+  // RESCHEDULE TERMINAL APPOINTMENT
+  //
+  // cancelled/completed/missed
+  //    ↓
+  // scheduled
+  //
+  // Create or update reminder.
+  // ========================================
 
-  else {
+  else if (
 
-    // Check whether date/time was changed
+    currentStatus !==
+      "scheduled" &&
 
-    const dateOrTimeChanged =
-      updateData.appointmentDate ||
-      updateData.appointmentTime;
+    finalStatus ===
+      "scheduled"
 
+  ) {
 
-    // --------------------------------------
-    // Calculate reminder time
-    // --------------------------------------
+    await syncAppointmentReminder(
 
-    const reminderTime =
-      new Date(
-        existingAppointment.appointmentDate
-      );
+      ownerId,
 
-
-    const [
-      hours,
-      minutes,
-    ] =
       existingAppointment
-        .appointmentTime
-        .split(":")
-        .map(Number);
 
-
-    reminderTime.setHours(
-      hours
     );
 
-    reminderTime.setMinutes(
-      minutes - 30
+  }
+
+
+  // ========================================
+  // UPDATE SCHEDULED APPOINTMENT
+  //
+  // Date/time changed
+  //    ↓
+  // Sync reminder.
+  // ========================================
+
+  else if (
+
+    currentStatus ===
+      "scheduled" &&
+
+    finalStatus ===
+      "scheduled" &&
+
+    hasScheduleChange
+
+  ) {
+
+    await syncAppointmentReminder(
+
+      ownerId,
+
+      existingAppointment
+
     );
-
-    reminderTime.setSeconds(
-      0
-    );
-
-    reminderTime.setMilliseconds(
-      0
-    );
-
-
-    // --------------------------------------
-    // Find existing reminder
-    // --------------------------------------
-
-    const reminder =
-      await Reminder.findOne({
-
-        appointment:
-          existingAppointment._id,
-
-        owner:
-          ownerId,
-
-      });
-
-
-    // --------------------------------------
-    // If reminder exists
-    // --------------------------------------
-
-    if (reminder) {
-
-      // Only reset reminder when
-      // appointment date/time changed.
-
-      if (dateOrTimeChanged) {
-
-        reminder.reminderTime =
-          reminderTime;
-
-        reminder.sent =
-          false;
-
-        reminder.sentAt =
-          null;
-
-        await reminder.save();
-
-      }
-
-    }
-
-
-    // --------------------------------------
-    // If reminder doesn't exist
-    // --------------------------------------
-
-    else {
-
-      await Reminder.create({
-
-        owner:
-          ownerId,
-
-        appointment:
-          existingAppointment._id,
-
-        reminderType:
-          "email",
-
-        reminderTime,
-
-        sent:
-          false,
-
-        sentAt:
-          null,
-
-      });
-
-    }
 
   }
 
@@ -715,12 +800,14 @@ export const updateAppointment = async (
   // ========================================
 
   return await existingAppointment.populate(
+
     "contact",
+
     "fullName phone email company designation"
+
   );
 
 };
-
 
 
 // ========================================
@@ -731,10 +818,6 @@ export const deleteAppointment = async (
   appointmentId,
   ownerId
 ) => {
-
-  // ========================================
-  // FIND & DELETE APPOINTMENT
-  // ========================================
 
   const appointment =
     await Appointment.findOneAndDelete({
@@ -751,8 +834,11 @@ export const deleteAppointment = async (
   if (!appointment) {
 
     throw new ApiError(
+
       HTTP_STATUS.NOT_FOUND,
+
       "Appointment not found."
+
     );
 
   }
@@ -762,21 +848,18 @@ export const deleteAppointment = async (
   // DELETE ASSOCIATED REMINDER
   // ========================================
 
-  await Reminder.deleteOne({
+  await deleteAppointmentReminder(
 
-    appointment:
-      appointment._id,
+    ownerId,
 
-    owner:
-      ownerId,
+    appointmentId
 
-  });
+  );
 
 
   return appointment;
 
 };
-
 
 
 // ========================================
@@ -790,70 +873,108 @@ export const updateAppointmentStatus = async (
 ) => {
 
   // ========================================
-  // UPDATE STATUS
+  // FIND APPOINTMENT
   // ========================================
 
   const appointment =
-    await Appointment.findOneAndUpdate(
+    await Appointment.findOne({
 
-      {
+      _id:
+        appointmentId,
 
-        _id:
-          appointmentId,
+      owner:
+        ownerId,
 
-        owner:
-          ownerId,
-
-      },
-
-      {
-
-        status,
-
-      },
-
-      {
-
-        new:
-          true,
-
-        runValidators:
-          true,
-
-      }
-
-    )
-
-      .populate(
-        "contact",
-        "fullName phone email company designation"
-      );
+    });
 
 
   if (!appointment) {
 
     throw new ApiError(
+
       HTTP_STATUS.NOT_FOUND,
+
       "Appointment not found."
+
     );
 
   }
 
 
   // ========================================
-  // SYNC REMINDER
+  // UPDATE STATUS
   // ========================================
 
-  await syncAppointmentReminder(
-    appointment,
-    ownerId
+  appointment.status =
+    status;
+
+
+  await appointment.save();
+
+
+  // ========================================
+  // REMOVE REMINDER
+  //
+  // Terminal statuses don't need reminders.
+  // ========================================
+
+  if (
+
+    [
+      "completed",
+      "cancelled",
+      "missed",
+    ].includes(status)
+
+  ) {
+
+    await deleteAppointmentReminder(
+
+      ownerId,
+
+      appointment._id
+
+    );
+
+  }
+
+
+  // ========================================
+  // RECREATE / SYNC REMINDER
+  //
+  // scheduled appointments always need
+  // a synchronized reminder.
+  // ========================================
+
+  if (
+    status ===
+    "scheduled"
+  ) {
+
+    await syncAppointmentReminder(
+
+      ownerId,
+
+      appointment
+
+    );
+
+  }
+
+
+  // ========================================
+  // RETURN UPDATED APPOINTMENT
+  // ========================================
+
+  return await appointment.populate(
+
+    "contact",
+
+    "fullName phone email company designation"
+
   );
 
-
-  return appointment;
-
 };
-
 
 
 // ========================================
@@ -869,7 +990,7 @@ export const getUpcomingAppointments = async (
 
 
   const today =
-    new Date(now);
+    new Date();
 
   today.setHours(
     0,
@@ -883,19 +1004,20 @@ export const getUpcomingAppointments = async (
     new Date(today);
 
   tomorrow.setDate(
-    tomorrow.getDate() + 1
+
+    tomorrow.getDate() +
+    1
+
   );
 
 
   const currentTime =
-    now
-      .toTimeString()
-      .slice(0, 5);
+    now.toTimeString()
+      .slice(
+        0,
+        5
+      );
 
-
-  // ========================================
-  // FETCH UPCOMING
-  // ========================================
 
   const appointments =
     await Appointment.find({
@@ -909,22 +1031,32 @@ export const getUpcomingAppointments = async (
       $or: [
 
         // Future dates
+
         {
 
           appointmentDate: {
 
-            $gt:
-              today,
+            $gte:
+              tomorrow,
 
           },
 
         },
 
-        // Today's future appointments
+
+        // Today + future time
+
         {
 
-          appointmentDate:
-            today,
+          appointmentDate: {
+
+            $gte:
+              today,
+
+            $lt:
+              tomorrow,
+
+          },
 
           appointmentTime: {
 
@@ -940,8 +1072,11 @@ export const getUpcomingAppointments = async (
     })
 
       .populate(
+
         "contact",
+
         "fullName phone email company designation"
+
       )
 
       .sort({
@@ -958,7 +1093,6 @@ export const getUpcomingAppointments = async (
   return appointments;
 
 };
-
 
 
 // ========================================
@@ -984,7 +1118,10 @@ export const getAppointmentStats = async (
     new Date(today);
 
   tomorrow.setDate(
-    tomorrow.getDate() + 1
+
+    tomorrow.getDate() +
+    1
+
   );
 
 
@@ -1007,9 +1144,7 @@ export const getAppointmentStats = async (
   ] = await Promise.all([
 
 
-    // ========================================
     // TOTAL
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1019,9 +1154,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // SCHEDULED
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1034,9 +1167,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // COMPLETED
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1049,9 +1180,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // CANCELLED
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1064,9 +1193,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // MISSED
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1079,9 +1206,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // TODAY
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1101,9 +1226,7 @@ export const getAppointmentStats = async (
     }),
 
 
-    // ========================================
     // UPCOMING
-    // ========================================
 
     Appointment.countDocuments({
 
@@ -1113,36 +1236,12 @@ export const getAppointmentStats = async (
       status:
         "scheduled",
 
-      $or: [
+      appointmentDate: {
 
-        {
+        $gte:
+          today,
 
-          appointmentDate: {
-
-            $gt:
-              today,
-
-          },
-
-        },
-
-        {
-
-          appointmentDate:
-            today,
-
-          appointmentTime: {
-
-            $gte:
-              new Date()
-                .toTimeString()
-                .slice(0, 5),
-
-          },
-
-        },
-
-      ],
+      },
 
     }),
 
@@ -1166,6 +1265,6 @@ export const getAppointmentStats = async (
 
     upcoming,
 
-  };
+  }
 
-};
+}

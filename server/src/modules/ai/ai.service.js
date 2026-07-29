@@ -27,6 +27,13 @@ import {
 import Reminder from "../reminders/reminder.schema.js";
 
 import {
+  createReminder,
+  getMyReminders,
+  updateReminder,
+  deleteReminder,
+} from "../reminders/reminder.service.js";
+
+import {
   AI_SECRETARY_SYSTEM_PROMPT,
 } from "./ai.prompts.js";
 
@@ -328,7 +335,7 @@ const tools = [
           fullName: {
             type: "string",
             description:
-              "New full name of the contact, if provided.",
+              "New full name of the contact, if the user wants to change it.",
           },
 
           phone: {
@@ -673,6 +680,213 @@ const tools = [
     },
   },
 
+
+  // ========================================
+  // CREATE REMINDER
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "create_reminder",
+
+      description:
+        "Create a reminder for an existing appointment. Use this when the user explicitly asks to create, add, or set a reminder for an appointment.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the appointment.",
+          },
+
+          appointmentTitle: {
+            type: "string",
+            description:
+              "Title of the appointment for which the reminder should be created.",
+          },
+
+          reminderType: {
+            type: "string",
+            enum: [
+              "email",
+              "whatsapp",
+            ],
+            description:
+              "Reminder delivery type.",
+          },
+
+          reminderTime: {
+            type: "string",
+            description:
+              "Reminder date and time in ISO 8601 format.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+          "reminderType",
+          "reminderTime",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // GET REMINDERS
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "get_reminders",
+
+      description:
+        "Get reminders belonging to the authenticated user. Use this when the user explicitly asks about reminders, upcoming reminders, scheduled reminders, or reminder history.",
+
+      parameters: {
+        type: "object",
+
+        properties: {},
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // UPDATE REMINDER
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "update_reminder",
+
+      description:
+        "Update an existing reminder belonging to the authenticated user. Use this when the user explicitly asks to update, edit, or change a reminder.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          reminderId: {
+            type: "string",
+            description:
+              "MongoDB ObjectId of the reminder, if available.",
+          },
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the reminder.",
+          },
+
+          appointmentTitle: {
+            type: "string",
+            description:
+              "Title of the appointment associated with the reminder.",
+          },
+
+          reminderType: {
+            type: "string",
+            enum: [
+              "email",
+              "whatsapp",
+            ],
+            description:
+              "Updated reminder delivery type.",
+          },
+
+          reminderTime: {
+            type: "string",
+            description:
+              "Updated reminder date and time in ISO 8601 format.",
+          },
+
+          sent: {
+            type: "boolean",
+            description:
+              "Whether the reminder has been sent.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // DELETE REMINDER
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "delete_reminder",
+
+      description:
+        "Delete an existing reminder belonging to the authenticated user. Use this when the user explicitly asks to delete, remove, or cancel a reminder.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          reminderId: {
+            type: "string",
+            description:
+              "MongoDB ObjectId of the reminder, if available.",
+          },
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the reminder.",
+          },
+
+          appointmentTitle: {
+            type: "string",
+            description:
+              "Title of the appointment associated with the reminder.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
 ];
 
 
@@ -820,7 +1034,28 @@ CALL RULES:
   - If callId is provided, use it to identify the exact call.
   - If callId is not provided, use the latest call for the specified contact.
   - Never modify or delete another user's call.
-  
+
+REMINDER RULES:
+- If the user explicitly asks to create, add, or set a reminder for an existing appointment, use create_reminder.
+- If the user explicitly asks about reminders, upcoming reminders, scheduled reminders, or reminder history, use get_reminders.
+- If the user explicitly asks to update, edit, or change a reminder, use update_reminder.
+- If the user explicitly asks to delete, remove, or cancel a reminder, use delete_reminder.
+
+- Never create a reminder unless explicitly requested.
+- Never update a reminder unless explicitly requested.
+- Never delete a reminder unless explicitly requested.
+
+- Reminders must always belong to an existing appointment.
+- Before creating a reminder, identify the correct contact and appointment.
+- Only operate on reminders belonging to the authenticated user.
+- reminderType must be either email or whatsapp.
+- reminderTime must be a valid ISO 8601 date-time.
+
+- For update_reminder and delete_reminder:
+  - If reminderId is provided, use it to identify the exact reminder.
+  - If reminderId is not provided, use contactName and appointmentTitle to identify the reminder.
+  - Never modify or delete another user's reminder.
+
 GENERAL RULES:
 - Never invent contact information.
 - If a required value is missing, ask the user for it.
@@ -1659,10 +1894,6 @@ ${
     "get_recent_calls"
   ) {
 
-    // ========================================
-    // SAFE LIMIT
-    // ========================================
-
     const parsedLimit =
       Number(
         args?.limit
@@ -1683,10 +1914,6 @@ ${
           )
         : 10;
 
-
-    // ========================================
-    // FETCH RECENT CALLS
-    // ========================================
 
     const result =
       await getMyCalls(
@@ -1711,10 +1938,6 @@ ${
       );
 
 
-    // ========================================
-    // NO CALLS
-    // ========================================
-
     if (
       !result ||
       !Array.isArray(
@@ -1729,10 +1952,6 @@ No call records found.
 
     }
 
-
-    // ========================================
-    // FORMAT CALLS
-    // ========================================
 
     const callsText =
       result.calls
@@ -1823,10 +2042,6 @@ Total Duration: ${stats.totalDuration} seconds
     "update_call"
   ) {
 
-    // ========================================
-    // FIND CONTACT
-    // ========================================
-
     const contact =
       await Contact.findOne({
 
@@ -1853,14 +2068,9 @@ I couldn't find a contact named "${args.contactName}".
     }
 
 
-    // ========================================
-    // FIND CALL
-    // ========================================
-
     let call;
 
 
-    // Exact call lookup
     if (
       args.callId
     ) {
@@ -1882,7 +2092,6 @@ I couldn't find a contact named "${args.contactName}".
     }
 
 
-    // Fallback: latest call of contact
     if (!call) {
 
       call =
@@ -1911,10 +2120,6 @@ I couldn't find a call record for ${contact.fullName}.
 
     }
 
-
-    // ========================================
-    // PREPARE UPDATE DATA
-    // ========================================
 
     const updateData = {};
 
@@ -1983,10 +2188,6 @@ I couldn't find a call record for ${contact.fullName}.
     }
 
 
-    // ========================================
-    // NOTHING TO UPDATE
-    // ========================================
-
     if (
       Object.keys(
         updateData
@@ -2000,10 +2201,6 @@ I found the call record, but I couldn't determine what information you want to u
     }
 
 
-    // ========================================
-    // UPDATE CALL
-    // ========================================
-
     const updatedCall =
       await updateCall(
 
@@ -2015,10 +2212,6 @@ I found the call record, but I couldn't determine what information you want to u
 
       );
 
-
-    // ========================================
-    // RESPONSE
-    // ========================================
 
     return `
 Call record updated successfully.
@@ -2056,10 +2249,6 @@ ${
     "delete_call"
   ) {
 
-    // ========================================
-    // FIND CONTACT
-    // ========================================
-
     const contact =
       await Contact.findOne({
 
@@ -2086,14 +2275,9 @@ I couldn't find a contact named "${args.contactName}".
     }
 
 
-    // ========================================
-    // FIND CALL
-    // ========================================
-
     let call;
 
 
-    // Exact call lookup
     if (
       args.callId
     ) {
@@ -2115,7 +2299,6 @@ I couldn't find a contact named "${args.contactName}".
     }
 
 
-    // Fallback: latest call of contact
     if (!call) {
 
       call =
@@ -2145,11 +2328,8 @@ I couldn't find a call record for ${contact.fullName}.
     }
 
 
-    // ========================================
-    // SAVE RESPONSE DATA
-    // ========================================
-
     const deletedCall = {
+
       callType:
         call.callType,
 
@@ -2158,12 +2338,9 @@ I couldn't find a call record for ${contact.fullName}.
 
       duration:
         call.duration || 0,
+
     };
 
-
-    // ========================================
-    // DELETE CALL
-    // ========================================
 
     await deleteCall(
 
@@ -2173,10 +2350,6 @@ I couldn't find a call record for ${contact.fullName}.
 
     );
 
-
-    // ========================================
-    // RESPONSE
-    // ========================================
 
     return `
 Call record deleted successfully.
@@ -2191,12 +2364,554 @@ Duration: ${deletedCall.duration} seconds
 
 
   // ========================================
+  // CREATE REMINDER
+  // ========================================
+
+  if (
+    toolName ===
+    "create_reminder"
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    const appointment =
+      await Appointment.findOne({
+
+        owner:
+          ownerId,
+
+        contact:
+          contact._id,
+
+        title: {
+          $regex:
+            args.appointmentTitle,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!appointment) {
+
+      return `
+I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
+`;
+
+    }
+
+
+    const reminder =
+      await createReminder(
+
+        ownerId,
+
+        {
+
+          appointment:
+            appointment._id,
+
+          reminderType:
+            args.reminderType,
+
+          reminderTime:
+            new Date(
+              args.reminderTime
+            ),
+
+        }
+
+      );
+
+
+    return `
+Reminder created successfully.
+
+Contact: ${contact.fullName}
+Appointment: ${appointment.title}
+Reminder Type: ${reminder.reminderType}
+Reminder Time: ${new Date(
+  reminder.reminderTime
+).toLocaleString()}
+`;
+
+  }
+
+
+  // ========================================
+  // GET REMINDERS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_reminders"
+  ) {
+
+    const result =
+      await getMyReminders(
+        ownerId
+      );
+
+      const reminders = 
+          result.reminders
+
+
+    if (
+      !reminders ||
+      reminders.length === 0
+    ) {
+
+      return `
+No reminders found.
+`;
+
+    }
+
+
+    const remindersText =
+      reminders
+        .map(
+          (
+            reminder,
+            index
+          ) => {
+
+            const contactName =
+              reminder.appointment
+                ?.contact
+                ?.fullName ||
+              "Unknown Contact";
+
+            const appointmentTitle =
+              reminder.appointment
+                ?.title ||
+              "Unknown Appointment";
+
+            const reminderTime =
+              reminder.reminderTime
+                ? new Date(
+                    reminder.reminderTime
+                  ).toLocaleString()
+                : "Not available";
+
+
+            return `
+${index + 1}. ${appointmentTitle}
+Contact: ${contactName}
+Type: ${reminder.reminderType}
+Reminder Time: ${reminderTime}
+Sent: ${reminder.sent ? "Yes" : "No"}
+${
+  reminder.sentAt
+    ? `Sent At: ${new Date(
+        reminder.sentAt
+      ).toLocaleString()}`
+    : ""
+}
+`;
+
+          }
+        )
+        .join(
+          "\n"
+        );
+
+
+    return `
+Here are your reminders:
+
+${remindersText}
+`;
+
+  }
+
+
+  // ========================================
+  // UPDATE REMINDER
+  // ========================================
+
+  if (
+    toolName ===
+    "update_reminder"
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    const appointment =
+      await Appointment.findOne({
+
+        owner:
+          ownerId,
+
+        contact:
+          contact._id,
+
+        title: {
+          $regex:
+            args.appointmentTitle,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!appointment) {
+
+      return `
+I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
+`;
+
+    }
+
+
+    let reminder;
+
+
+    if (
+      args.reminderId
+    ) {
+
+      reminder =
+        await Reminder.findOne({
+
+          _id:
+            args.reminderId,
+
+          owner:
+            ownerId,
+
+          appointment:
+            appointment._id,
+
+        });
+
+    }
+
+
+    if (!reminder) {
+
+      reminder =
+        await Reminder.findOne({
+
+          owner:
+            ownerId,
+
+          appointment:
+            appointment._id,
+
+        })
+          .sort({
+            reminderTime:
+              1,
+          });
+
+    }
+
+
+    if (!reminder) {
+
+      return `
+I couldn't find a reminder for the appointment "${appointment.title}".
+`;
+
+    }
+
+
+    const updateData = {};
+
+
+    if (
+      args.reminderType !== undefined
+    ) {
+
+      updateData.reminderType =
+        args.reminderType;
+
+    }
+
+
+    if (
+      args.reminderTime !== undefined
+    ) {
+
+      updateData.reminderTime =
+        new Date(
+          args.reminderTime
+        );
+
+      updateData.sent =
+        false;
+
+      updateData.sentAt =
+        null;
+
+    }
+
+
+    if (
+      args.sent !== undefined
+    ) {
+
+      updateData.sent =
+        args.sent;
+
+    }
+
+
+    if (
+      Object.keys(
+        updateData
+      ).length === 0
+    ) {
+
+      return `
+I found the reminder, but I couldn't determine what information you want to update.
+`;
+
+    }
+
+
+    const updatedReminder =
+      await updateReminder(
+
+        reminder._id,
+
+        ownerId,
+
+        updateData
+
+      );
+
+
+    return `
+Reminder updated successfully.
+
+Contact: ${contact.fullName}
+Appointment: ${appointment.title}
+Type: ${updatedReminder.reminderType}
+Reminder Time: ${new Date(
+  updatedReminder.reminderTime
+).toLocaleString()}
+Sent: ${
+  updatedReminder.sent
+    ? "Yes"
+    : "No"
+}
+`;
+
+  }
+
+
+  // ========================================
+  // DELETE REMINDER
+  // ========================================
+
+  if (
+    toolName ===
+    "delete_reminder"
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    const appointment =
+      await Appointment.findOne({
+
+        owner:
+          ownerId,
+
+        contact:
+          contact._id,
+
+        title: {
+          $regex:
+            args.appointmentTitle,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!appointment) {
+
+      return `
+I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
+`;
+
+    }
+
+
+    let reminder;
+
+
+    if (
+      args.reminderId
+    ) {
+
+      reminder =
+        await Reminder.findOne({
+
+          _id:
+            args.reminderId,
+
+          owner:
+            ownerId,
+
+          appointment:
+            appointment._id,
+
+        });
+
+    }
+
+
+    if (!reminder) {
+
+      reminder =
+        await Reminder.findOne({
+
+          owner:
+            ownerId,
+
+          appointment:
+            appointment._id,
+
+        })
+          .sort({
+            reminderTime:
+              1,
+          });
+
+    }
+
+
+    if (!reminder) {
+
+      return `
+I couldn't find a reminder for the appointment "${appointment.title}".
+`;
+
+    }
+
+
+    const deletedReminder = {
+
+      reminderType:
+        reminder.reminderType,
+
+      reminderTime:
+        reminder.reminderTime,
+
+    };
+
+
+    await deleteReminder(
+
+      reminder._id,
+
+      ownerId
+
+    );
+
+
+    return `
+Reminder deleted successfully.
+
+Contact: ${contact.fullName}
+Appointment: ${appointment.title}
+Type: ${deletedReminder.reminderType}
+Reminder Time: ${new Date(
+  deletedReminder.reminderTime
+).toLocaleString()}
+`;
+
+  }
+
+
+  // ========================================
   // FALLBACK
   // ========================================
 
   return (
     assistantMessage.content ||
     "I couldn't process your request."
-  );
+  )
 
-};
+}

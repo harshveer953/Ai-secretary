@@ -30,4 +30,4 @@ export const chat = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-};
+}

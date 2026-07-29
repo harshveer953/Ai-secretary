@@ -17,6 +17,16 @@ import {
 } from "../appointments/appointment.service.js";
 
 import {
+  createCall,
+  getMyCalls,
+  getCallStats,
+  updateCall,
+  deleteCall,
+} from "../calls/call.service.js";
+
+import Reminder from "../reminders/reminder.schema.js";
+
+import {
   AI_SECRETARY_SYSTEM_PROMPT,
 } from "./ai.prompts.js";
 
@@ -83,7 +93,7 @@ const tools = [
           duration: {
             type: "number",
             description:
-              "Appointment duration in minutes. Default is 30.",
+              "Appointment duration in minutes.",
           },
 
         },
@@ -94,6 +104,8 @@ const tools = [
           "appointmentDate",
           "appointmentTime",
         ],
+
+        additionalProperties: false,
       },
     },
   },
@@ -110,7 +122,7 @@ const tools = [
       name: "update_appointment",
 
       description:
-        "Update, edit, reschedule, or change an existing appointment for the authenticated user. Use this only when the user explicitly asks to update or change an appointment.",
+        "Update an existing appointment for the authenticated user. Use this when the user explicitly asks to change, update, reschedule, or edit an appointment.",
 
       parameters: {
         type: "object",
@@ -150,7 +162,7 @@ const tools = [
           appointmentTime: {
             type: "string",
             description:
-              "New appointment time in HH:mm 24-hour format, if provided.",
+              "New appointment time in 24-hour HH:mm format, if provided.",
           },
 
           duration: {
@@ -177,6 +189,8 @@ const tools = [
           "contactName",
           "appointmentTitle",
         ],
+
+        additionalProperties: false,
       },
     },
   },
@@ -193,7 +207,7 @@ const tools = [
       name: "cancel_appointment",
 
       description:
-        "Cancel an existing scheduled appointment for the authenticated user. Use this only when the user explicitly asks to cancel an appointment.",
+        "Cancel an existing appointment for the authenticated user. Use this when the user explicitly asks to cancel an appointment.",
 
       parameters: {
         type: "object",
@@ -218,6 +232,8 @@ const tools = [
           "contactName",
           "appointmentTitle",
         ],
+
+        additionalProperties: false,
       },
     },
   },
@@ -234,7 +250,7 @@ const tools = [
       name: "create_contact",
 
       description:
-        "Create a new contact for the authenticated user. Use this only when the user explicitly asks to add, create, or save a contact.",
+        "Create a new contact for the authenticated user. Use this when the user explicitly asks to add, create, or save a new contact.",
 
       parameters: {
         type: "object",
@@ -278,6 +294,8 @@ const tools = [
           "phone",
           "email",
         ],
+
+        additionalProperties: false,
       },
     },
   },
@@ -294,7 +312,7 @@ const tools = [
       name: "update_contact",
 
       description:
-        "Update or edit an existing contact for the authenticated user. Use this only when the user explicitly asks to change or update contact information.",
+        "Update an existing contact for the authenticated user. Use this when the user explicitly asks to change, update, or edit contact information.",
 
       parameters: {
         type: "object",
@@ -342,6 +360,8 @@ const tools = [
         required: [
           "contactName",
         ],
+
+        additionalProperties: false,
       },
     },
   },
@@ -376,12 +396,284 @@ const tools = [
         required: [
           "contactName",
         ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // CREATE CALL
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "create_call",
+
+      description:
+        "Create a new call record for the authenticated user. Use this only when the user explicitly asks to log, record, or create a call.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the call.",
+          },
+
+          callType: {
+            type: "string",
+            enum: [
+              "incoming",
+              "outgoing",
+            ],
+            description:
+              "Whether the call was incoming or outgoing.",
+          },
+
+          status: {
+            type: "string",
+            enum: [
+              "answered",
+              "missed",
+              "rejected",
+            ],
+            description:
+              "Status of the call.",
+          },
+
+          duration: {
+            type: "number",
+            description:
+              "Call duration in seconds.",
+          },
+
+          notes: {
+            type: "string",
+            description:
+              "Optional notes about the call.",
+          },
+
+          startedAt: {
+            type: "string",
+            description:
+              "Call start date and time in ISO 8601 format.",
+          },
+
+          endedAt: {
+            type: "string",
+            description:
+              "Optional call end date and time in ISO 8601 format.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "callType",
+          "status",
+          "startedAt",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // GET RECENT CALLS
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "get_recent_calls",
+
+      description:
+        "Get recent call records of the authenticated user. Use this when the user explicitly asks about recent calls, latest calls, call history, or recent call records.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            description:
+              "Maximum number of recent calls to return. Must be a number between 1 and 50. If not provided, use 10.",
+          },
+
+        },
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // GET CALL STATS
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "get_call_stats",
+
+      description:
+        "Get call statistics for the authenticated user. Use this when the user asks about total calls, incoming calls, outgoing calls, answered calls, missed calls, rejected calls, today's calls, or total call duration.",
+
+      parameters: {
+        type: "object",
+
+        properties: {},
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // UPDATE CALL
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "update_call",
+
+      description:
+        "Update an existing call record for the authenticated user. Use this only when the user explicitly asks to update, edit, or change an existing call record.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the call.",
+          },
+
+          callId: {
+            type: "string",
+            description:
+              "MongoDB ObjectId of the call record, if available.",
+          },
+
+          callType: {
+            type: "string",
+            enum: [
+              "incoming",
+              "outgoing",
+            ],
+          },
+
+          status: {
+            type: "string",
+            enum: [
+              "answered",
+              "missed",
+              "rejected",
+            ],
+          },
+
+          duration: {
+            type: "number",
+            description:
+              "Updated call duration in seconds.",
+          },
+
+          notes: {
+            type: "string",
+            description:
+              "Updated notes for the call.",
+          },
+
+          startedAt: {
+            type: "string",
+            description:
+              "Updated call start date and time in ISO 8601 format.",
+          },
+
+          endedAt: {
+            type: "string",
+            description:
+              "Updated call end date and time in ISO 8601 format.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // DELETE CALL
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "delete_call",
+
+      description:
+        "Delete an existing call record for the authenticated user. Use this only when the user explicitly asks to delete or remove a call record.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+            description:
+              "Full name of the contact associated with the call.",
+          },
+
+          callId: {
+            type: "string",
+            description:
+              "MongoDB ObjectId of the call record, if available.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+        ],
+
+        additionalProperties: false,
       },
     },
   },
 
 ];
-
 
 
 // ========================================
@@ -403,10 +695,6 @@ export const chatWithAI = async (
     calls,
   ] = await Promise.all([
 
-    // ========================================
-    // CONTACTS
-    // ========================================
-
     Contact.find({
       owner: ownerId,
     })
@@ -415,11 +703,6 @@ export const chatWithAI = async (
       )
       .limit(20)
       .lean(),
-
-
-    // ========================================
-    // APPOINTMENTS
-    // ========================================
 
     Appointment.find({
       owner: ownerId,
@@ -433,11 +716,6 @@ export const chatWithAI = async (
       })
       .limit(20)
       .lean(),
-
-
-    // ========================================
-    // CALLS
-    // ========================================
 
     Call.find({
       owner: ownerId,
@@ -492,10 +770,6 @@ ${JSON.stringify(
 
       messages: [
 
-        // ========================================
-        // SYSTEM PROMPT
-        // ========================================
-
         {
           role: "system",
 
@@ -505,48 +779,59 @@ ${AI_SECRETARY_SYSTEM_PROMPT}
 CURRENT DATE:
 ${new Date().toISOString()}
 
-IMPORTANT RULES:
-
+IMPORTANT:
 - The authenticated user's ID is ${ownerId}.
-- You can answer questions using the authenticated user's data.
-- Always respect the authenticated user's ownership.
-- Never access or modify another user's data.
-
-CONTACT RULES:
-
-- If the user explicitly asks to create, add, or save a contact, use create_contact.
-- If the user explicitly asks to update or edit a contact, use update_contact.
-- If the user explicitly asks to delete or remove a contact, use delete_contact.
-- Never create a contact unless explicitly requested.
-- Never update a contact unless explicitly requested.
-- Never delete a contact unless explicitly requested.
-- Never invent contact information.
-- If a required contact field is missing, ask the user for it.
+- You can answer questions using the user's data.
 
 APPOINTMENT RULES:
+- If the user explicitly asks you to create an appointment, use create_appointment.
+- If the user explicitly asks you to update, edit, reschedule, or change an appointment, use update_appointment.
+- If the user explicitly asks you to cancel an appointment, use cancel_appointment.
+- Never create an appointment unless the user explicitly asks.
+- Never update an appointment unless the user explicitly asks.
+- Never cancel an appointment unless the user explicitly asks.
 
-- If the user explicitly asks to create, schedule, or book an appointment, use create_appointment.
-- If the user explicitly asks to update, edit, reschedule, or change an appointment, use update_appointment.
-- If the user explicitly asks to cancel an appointment, use cancel_appointment.
-- Never create an appointment unless explicitly requested.
-- Never update an appointment unless explicitly requested.
-- Never cancel an appointment unless explicitly requested.
-- Never invent appointment information.
-- If a required appointment value is missing, ask the user for it.
+CONTACT RULES:
+- If the user explicitly asks you to create or add a contact, use create_contact.
+- If the user explicitly asks you to update or edit a contact, use update_contact.
+- If the user explicitly asks you to delete or remove a contact, use delete_contact.
+- Never create a contact unless the user explicitly asks.
+- Never update a contact unless the user explicitly asks.
+- Never delete a contact unless the user explicitly asks.
 
-DATE AND TIME RULES:
+CALL RULES:
+- If the user explicitly asks to create, log, record, or save a call, use create_call.
+- If the user explicitly asks about recent calls, latest calls, call history, or recent call records, use get_recent_calls.
+- If the user explicitly asks for call statistics or call analytics, use get_call_stats.
+- If the user explicitly asks to update, edit, or change an existing call record, use update_call.
+- If the user explicitly asks to delete or remove an existing call record, use delete_call.
 
+- Never create a call unless explicitly requested.
+- Never update a call unless explicitly requested.
+- Never delete a call unless explicitly requested.
+- Never invent call information.
+
+- For get_recent_calls, limit must always be a number between 1 and 50.
+- If the user does not provide a limit, use 10.
+
+- For update_call and delete_call:
+  - Always identify the correct contact first.
+  - Only operate on calls belonging to the authenticated user.
+  - If callId is provided, use it to identify the exact call.
+  - If callId is not provided, use the latest call for the specified contact.
+  - Never modify or delete another user's call.
+  
+GENERAL RULES:
+- Never invent contact information.
+- If a required value is missing, ask the user for it.
 - Appointment date must be YYYY-MM-DD.
 - Appointment time must be HH:mm in 24-hour format.
-- If the user provides a relative date such as tomorrow or next Monday, convert it using the current date.
-- Default appointment duration is 30 minutes if not provided.
+- Call type must be either incoming or outgoing.
+- Call status must be either answered, missed, or rejected.
+- startedAt must be a valid ISO 8601 date-time.
 `,
         },
 
-
-        // ========================================
-        // USER APPLICATION DATA
-        // ========================================
 
         {
           role: "system",
@@ -559,14 +844,11 @@ ${userContext}
         },
 
 
-        // ========================================
-        // USER MESSAGE
-        // ========================================
-
         {
           role: "user",
 
-          content: message,
+          content:
+            message,
         },
 
       ],
@@ -588,14 +870,8 @@ ${userContext}
     });
 
 
-  // ========================================
-  // AI MESSAGE
-  // ========================================
-
   const assistantMessage =
-    completion
-      .choices[0]
-      .message;
+    completion.choices[0].message;
 
 
   // ========================================
@@ -616,27 +892,21 @@ ${userContext}
 
 
   // ========================================
-  // GET TOOL CALL
+  // HANDLE TOOL CALL
   // ========================================
 
   const toolCall =
-    assistantMessage
-      .tool_calls[0];
+    assistantMessage.tool_calls[0];
 
 
   const toolName =
-    toolCall
-      .function
-      .name;
+    toolCall.function.name;
 
 
   const args =
     JSON.parse(
-      toolCall
-        .function
-        .arguments
+      toolCall.function.arguments
     );
-
 
 
   // ========================================
@@ -647,10 +917,6 @@ ${userContext}
     toolName ===
     "create_appointment"
   ) {
-
-    // ========================================
-    // FIND CONTACT
-    // ========================================
 
     const contact =
       await Contact.findOne({
@@ -679,10 +945,6 @@ Please make sure the contact exists before creating the appointment.
 
     }
 
-
-    // ========================================
-    // CREATE APPOINTMENT
-    // ========================================
 
     const appointment =
       await createAppointment(
@@ -718,10 +980,6 @@ Please make sure the contact exists before creating the appointment.
       );
 
 
-    // ========================================
-    // SUCCESS RESPONSE
-    // ========================================
-
     return `
 Appointment created successfully.
 
@@ -737,7 +995,6 @@ A reminder has also been automatically created for this appointment.
   }
 
 
-
   // ========================================
   // UPDATE APPOINTMENT
   // ========================================
@@ -746,10 +1003,6 @@ A reminder has also been automatically created for this appointment.
     toolName ===
     "update_appointment"
   ) {
-
-    // ========================================
-    // FIND CONTACT
-    // ========================================
 
     const contact =
       await Contact.findOne({
@@ -776,10 +1029,6 @@ I couldn't find a contact named "${args.contactName}".
 
     }
 
-
-    // ========================================
-    // FIND APPOINTMENT
-    // ========================================
 
     const appointment =
       await Appointment.findOne({
@@ -809,10 +1058,6 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
     }
 
-
-    // ========================================
-    // PREPARE UPDATE DATA
-    // ========================================
 
     const updateData = {};
 
@@ -879,13 +1124,10 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
     }
 
 
-    // ========================================
-    // CHECK UPDATE DATA
-    // ========================================
-
     if (
-      Object.keys(updateData)
-        .length === 0
+      Object.keys(
+        updateData
+      ).length === 0
     ) {
 
       return `
@@ -894,10 +1136,6 @@ I found the appointment, but I couldn't determine what information you want to u
 
     }
 
-
-    // ========================================
-    // UPDATE APPOINTMENT
-    // ========================================
 
     const updatedAppointment =
       await updateAppointment(
@@ -911,15 +1149,11 @@ I found the appointment, but I couldn't determine what information you want to u
       );
 
 
-    // ========================================
-    // SUCCESS RESPONSE
-    // ========================================
-
     return `
 Appointment updated successfully.
 
 Title: ${updatedAppointment.title}
-Contact: ${contact.fullName}
+Contact: ${updatedAppointment.contact.fullName}
 Date: ${new Date(
   updatedAppointment.appointmentDate
 )
@@ -935,7 +1169,6 @@ The associated reminder has been automatically synchronized.
   }
 
 
-
   // ========================================
   // CANCEL APPOINTMENT
   // ========================================
@@ -944,10 +1177,6 @@ The associated reminder has been automatically synchronized.
     toolName ===
     "cancel_appointment"
   ) {
-
-    // ========================================
-    // FIND CONTACT
-    // ========================================
 
     const contact =
       await Contact.findOne({
@@ -974,10 +1203,6 @@ I couldn't find a contact named "${args.contactName}".
 
     }
 
-
-    // ========================================
-    // FIND SCHEDULED APPOINTMENT
-    // ========================================
 
     const appointment =
       await Appointment.findOne({
@@ -1011,13 +1236,6 @@ I couldn't find a scheduled appointment titled "${args.appointmentTitle}" for ${
     }
 
 
-    // ========================================
-    // CANCEL APPOINTMENT
-    //
-    // updateAppointmentStatus internally
-    // removes the associated reminder
-    // ========================================
-
     const cancelledAppointment =
       await updateAppointmentStatus(
 
@@ -1030,9 +1248,16 @@ I couldn't find a scheduled appointment titled "${args.appointmentTitle}" for ${
       );
 
 
-    // ========================================
-    // SUCCESS RESPONSE
-    // ========================================
+    await Reminder.deleteOne({
+
+      appointment:
+        appointment._id,
+
+      owner:
+        ownerId,
+
+    });
+
 
     return `
 Appointment cancelled successfully.
@@ -1053,7 +1278,6 @@ The associated reminder has also been removed.
   }
 
 
-
   // ========================================
   // CREATE CONTACT
   // ========================================
@@ -1062,10 +1286,6 @@ The associated reminder has also been removed.
     toolName ===
     "create_contact"
   ) {
-
-    // ========================================
-    // CHECK DUPLICATE CONTACT
-    // ========================================
 
     const existingContact =
       await Contact.findOne({
@@ -1103,10 +1323,6 @@ Phone: ${existingContact.phone}
     }
 
 
-    // ========================================
-    // CREATE CONTACT
-    // ========================================
-
     const contact =
       await createContact(
 
@@ -1136,10 +1352,6 @@ Phone: ${existingContact.phone}
       );
 
 
-    // ========================================
-    // SUCCESS RESPONSE
-    // ========================================
-
     return `
 Contact created successfully.
 
@@ -1153,7 +1365,6 @@ Designation: ${contact.designation || "Not provided"}
   }
 
 
-
   // ========================================
   // UPDATE CONTACT
   // ========================================
@@ -1162,10 +1373,6 @@ Designation: ${contact.designation || "Not provided"}
     toolName ===
     "update_contact"
   ) {
-
-    // ========================================
-    // FIND CONTACT
-    // ========================================
 
     const contact =
       await Contact.findOne({
@@ -1192,10 +1399,6 @@ I couldn't find a contact named "${args.contactName}".
 
     }
 
-
-    // ========================================
-    // PREPARE UPDATE DATA
-    // ========================================
 
     const updateData = {};
 
@@ -1250,13 +1453,10 @@ I couldn't find a contact named "${args.contactName}".
     }
 
 
-    // ========================================
-    // CHECK UPDATE DATA
-    // ========================================
-
     if (
-      Object.keys(updateData)
-        .length === 0
+      Object.keys(
+        updateData
+      ).length === 0
     ) {
 
       return `
@@ -1265,10 +1465,6 @@ I found the contact, but I couldn't determine what information you want to updat
 
     }
 
-
-    // ========================================
-    // UPDATE CONTACT
-    // ========================================
 
     const updatedContact =
       await updateContact(
@@ -1281,10 +1477,6 @@ I found the contact, but I couldn't determine what information you want to updat
 
       );
 
-
-    // ========================================
-    // SUCCESS RESPONSE
-    // ========================================
 
     return `
 Contact updated successfully.
@@ -1299,7 +1491,6 @@ Designation: ${updatedContact.designation || "Not provided"}
   }
 
 
-
   // ========================================
   // DELETE CONTACT
   // ========================================
@@ -1307,6 +1498,329 @@ Designation: ${updatedContact.designation || "Not provided"}
   if (
     toolName ===
     "delete_contact"
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    const deletedContact =
+      await deleteContact(
+
+        contact._id,
+
+        ownerId
+
+      );
+
+
+    return `
+Contact deleted successfully.
+
+Name: ${deletedContact.fullName}
+Phone: ${deletedContact.phone}
+Email: ${deletedContact.email}
+Company: ${deletedContact.company || "Not provided"}
+Designation: ${deletedContact.designation || "Not provided"}
+`;
+
+  }
+
+
+  // ========================================
+  // CREATE CALL
+  // ========================================
+
+  if (
+    toolName ===
+    "create_call"
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+
+Please make sure the contact exists before creating the call record.
+`;
+
+    }
+
+
+    const call =
+      await createCall(
+
+        ownerId,
+
+        {
+
+          contact:
+            contact._id,
+
+          callType:
+            args.callType,
+
+          status:
+            args.status,
+
+          duration:
+            args.duration ||
+            0,
+
+          notes:
+            args.notes ||
+            "",
+
+          startedAt:
+            new Date(
+              args.startedAt
+            ),
+
+          endedAt:
+            args.endedAt
+              ? new Date(
+                  args.endedAt
+                )
+              : undefined,
+
+        }
+
+      );
+
+
+    return `
+Call record created successfully.
+
+Contact: ${contact.fullName}
+Type: ${call.callType}
+Status: ${call.status}
+Duration: ${call.duration} seconds
+Started At: ${call.startedAt.toISOString()}
+${
+  call.endedAt
+    ? `Ended At: ${call.endedAt.toISOString()}`
+    : ""
+}
+${
+  call.notes
+    ? `Notes: ${call.notes}`
+    : ""
+}
+`;
+
+  }
+
+
+  // ========================================
+  // GET RECENT CALLS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_recent_calls"
+  ) {
+
+    // ========================================
+    // SAFE LIMIT
+    // ========================================
+
+    const parsedLimit =
+      Number(
+        args?.limit
+      );
+
+    const limit =
+      Number.isFinite(
+        parsedLimit
+      )
+        ? Math.min(
+            Math.max(
+              Math.floor(
+                parsedLimit
+              ),
+              1
+            ),
+            50
+          )
+        : 10;
+
+
+    // ========================================
+    // FETCH RECENT CALLS
+    // ========================================
+
+    const result =
+      await getMyCalls(
+
+        ownerId,
+
+        {
+          page:
+            1,
+
+          limit:
+            limit,
+
+          sortBy:
+            "createdAt",
+
+          sortOrder:
+            "desc",
+
+        }
+
+      );
+
+
+    // ========================================
+    // NO CALLS
+    // ========================================
+
+    if (
+      !result ||
+      !Array.isArray(
+        result.calls
+      ) ||
+      result.calls.length === 0
+    ) {
+
+      return `
+No call records found.
+`;
+
+    }
+
+
+    // ========================================
+    // FORMAT CALLS
+    // ========================================
+
+    const callsText =
+      result.calls
+        .map(
+          (
+            call,
+            index
+          ) => {
+
+            const contactName =
+              call.contact?.fullName ||
+              "Unknown Contact";
+
+            const startedAt =
+              call.startedAt
+                ? new Date(
+                    call.startedAt
+                  ).toLocaleString()
+                : "Not available";
+
+
+            return `
+${index + 1}. ${contactName}
+Type: ${call.callType}
+Status: ${call.status}
+Duration: ${call.duration || 0} seconds
+Started At: ${startedAt}
+${
+  call.notes
+    ? `Notes: ${call.notes}`
+    : ""
+}
+`;
+
+          }
+        )
+        .join(
+          "\n"
+        );
+
+
+    return `
+Here are your recent calls:
+
+${callsText}
+`;
+
+  }
+
+
+  // ========================================
+  // GET CALL STATS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_call_stats"
+  ) {
+
+    const stats =
+      await getCallStats(
+        ownerId
+      );
+
+
+    return `
+Here are your call statistics.
+
+Total Calls: ${stats.total}
+Incoming Calls: ${stats.incoming}
+Outgoing Calls: ${stats.outgoing}
+Answered Calls: ${stats.answered}
+Missed Calls: ${stats.missed}
+Rejected Calls: ${stats.rejected}
+Today's Calls: ${stats.today}
+Total Duration: ${stats.totalDuration} seconds
+`;
+
+  }
+
+
+  // ========================================
+  // UPDATE CALL
+  // ========================================
+
+  if (
+    toolName ===
+    "update_call"
   ) {
 
     // ========================================
@@ -1340,35 +1854,340 @@ I couldn't find a contact named "${args.contactName}".
 
 
     // ========================================
-    // DELETE CONTACT
+    // FIND CALL
     // ========================================
 
-    const deletedContact =
-      await deleteContact(
+    let call;
 
-        contact._id,
 
-        ownerId
+    // Exact call lookup
+    if (
+      args.callId
+    ) {
+
+      call =
+        await Call.findOne({
+
+          _id:
+            args.callId,
+
+          owner:
+            ownerId,
+
+          contact:
+            contact._id,
+
+        });
+
+    }
+
+
+    // Fallback: latest call of contact
+    if (!call) {
+
+      call =
+        await Call.findOne({
+
+          owner:
+            ownerId,
+
+          contact:
+            contact._id,
+
+        })
+          .sort({
+            createdAt:
+              -1,
+          });
+
+    }
+
+
+    if (!call) {
+
+      return `
+I couldn't find a call record for ${contact.fullName}.
+`;
+
+    }
+
+
+    // ========================================
+    // PREPARE UPDATE DATA
+    // ========================================
+
+    const updateData = {};
+
+
+    if (
+      args.callType !== undefined
+    ) {
+
+      updateData.callType =
+        args.callType;
+
+    }
+
+
+    if (
+      args.status !== undefined
+    ) {
+
+      updateData.status =
+        args.status;
+
+    }
+
+
+    if (
+      args.duration !== undefined
+    ) {
+
+      updateData.duration =
+        args.duration;
+
+    }
+
+
+    if (
+      args.notes !== undefined
+    ) {
+
+      updateData.notes =
+        args.notes;
+
+    }
+
+
+    if (
+      args.startedAt !== undefined
+    ) {
+
+      updateData.startedAt =
+        new Date(
+          args.startedAt
+        );
+
+    }
+
+
+    if (
+      args.endedAt !== undefined
+    ) {
+
+      updateData.endedAt =
+        new Date(
+          args.endedAt
+        );
+
+    }
+
+
+    // ========================================
+    // NOTHING TO UPDATE
+    // ========================================
+
+    if (
+      Object.keys(
+        updateData
+      ).length === 0
+    ) {
+
+      return `
+I found the call record, but I couldn't determine what information you want to update.
+`;
+
+    }
+
+
+    // ========================================
+    // UPDATE CALL
+    // ========================================
+
+    const updatedCall =
+      await updateCall(
+
+        call._id,
+
+        ownerId,
+
+        updateData
 
       );
 
 
     // ========================================
-    // SUCCESS RESPONSE
+    // RESPONSE
     // ========================================
 
     return `
-Contact deleted successfully.
+Call record updated successfully.
 
-Name: ${deletedContact.fullName}
-Phone: ${deletedContact.phone}
-Email: ${deletedContact.email}
-Company: ${deletedContact.company || "Not provided"}
-Designation: ${deletedContact.designation || "Not provided"}
+Contact: ${contact.fullName}
+Type: ${updatedCall.callType}
+Status: ${updatedCall.status}
+Duration: ${updatedCall.duration || 0} seconds
+Started At: ${
+  updatedCall.startedAt
+    ? updatedCall.startedAt.toISOString()
+    : "Not available"
+}
+${
+  updatedCall.endedAt
+    ? `Ended At: ${updatedCall.endedAt.toISOString()}`
+    : ""
+}
+${
+  updatedCall.notes
+    ? `Notes: ${updatedCall.notes}`
+    : ""
+}
 `;
 
   }
 
+
+  // ========================================
+  // DELETE CALL
+  // ========================================
+
+  if (
+    toolName ===
+    "delete_call"
+  ) {
+
+    // ========================================
+    // FIND CONTACT
+    // ========================================
+
+    const contact =
+      await Contact.findOne({
+
+        owner:
+          ownerId,
+
+        fullName: {
+          $regex:
+            args.contactName,
+
+          $options:
+            "i",
+        },
+
+      });
+
+
+    if (!contact) {
+
+      return `
+I couldn't find a contact named "${args.contactName}".
+`;
+
+    }
+
+
+    // ========================================
+    // FIND CALL
+    // ========================================
+
+    let call;
+
+
+    // Exact call lookup
+    if (
+      args.callId
+    ) {
+
+      call =
+        await Call.findOne({
+
+          _id:
+            args.callId,
+
+          owner:
+            ownerId,
+
+          contact:
+            contact._id,
+
+        });
+
+    }
+
+
+    // Fallback: latest call of contact
+    if (!call) {
+
+      call =
+        await Call.findOne({
+
+          owner:
+            ownerId,
+
+          contact:
+            contact._id,
+
+        })
+          .sort({
+            createdAt:
+              -1,
+          });
+
+    }
+
+
+    if (!call) {
+
+      return `
+I couldn't find a call record for ${contact.fullName}.
+`;
+
+    }
+
+
+    // ========================================
+    // SAVE RESPONSE DATA
+    // ========================================
+
+    const deletedCall = {
+      callType:
+        call.callType,
+
+      status:
+        call.status,
+
+      duration:
+        call.duration || 0,
+    };
+
+
+    // ========================================
+    // DELETE CALL
+    // ========================================
+
+    await deleteCall(
+
+      call._id,
+
+      ownerId
+
+    );
+
+
+    // ========================================
+    // RESPONSE
+    // ========================================
+
+    return `
+Call record deleted successfully.
+
+Contact: ${contact.fullName}
+Type: ${deletedCall.callType}
+Status: ${deletedCall.status}
+Duration: ${deletedCall.duration} seconds
+`;
+
+  }
 
 
   // ========================================

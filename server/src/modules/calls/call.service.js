@@ -1,285 +1,638 @@
-import Call from "./call.schema.js"
-import Contact from "../contacts/contact.schema.js"
+import Call from "./call.schema.js";
+import Contact from "../contacts/contact.schema.js";
 
-import ApiError from "../../shared/ApiError.js"
-import HTTP_STATUS from "../../constants/httpStatus.js"
-
-
-export const createCall = async (ownerId , callData) => {
-
-    // Check if contact exists
-    const contact = await Contact.findOne({
-        _id: callData.contact,
-        owner: ownerId,
-    })
-
-    if (!contact) {
-        throw new ApiError(
-            HTTP_STATUS.NOT_FOUND,
-            "Contact not found."
-        )
-    }
-
-    // Create Call
-    const call = await Call.create({
-        owner: ownerId,
-        ...callData,
-    })
-
-    return await call.populate(
-        "contact",
-        "fullName phone email company designation"
-    )
-}
+import ApiError from "../../shared/ApiError.js";
+import HTTP_STATUS from "../../constants/httpStatus.js";
 
 
-export const getMyCalls = async (
-    ownerId,
-    query = {}
- ) => {
+// ========================================
+// CREATE CALL
+// ========================================
 
-    // Query Parameters
-    const {
-        page = 1,
-        limit = 10,
-        search = "",
-        sortBy = "createdAt",
-        sortOrder = "desc",
-        status,
-        callType,
-    } = query
+export const createCall = async (
+  ownerId,
+  callData
+) => {
 
-    // Pagination
-    const skip = (page - 1) * limit
+  // ========================================
+  // CHECK CONTACT
+  // ========================================
 
-
-    // mongo filter
-    const filter = {
-        owner: ownerId,
-    }
-
-    // Search
-    if (search) {
-        filter.notes = {
-            $regex : search,
-            $options : "i",
-        }
-    }
-
-    // Status Filter
-    if (status) {
-        filter.status = status
-    }
-
-    if (callType) {
-        filter.callType = callType
-    }
-
-    //Sort 
-    const sort = {
-        [sortBy]: sortOrder === "asc" ? 1 : -1,
-    }
+  const contact =
+    await Contact.findOne({
+      _id: callData.contact,
+      owner: ownerId,
+    });
 
 
-    // Fetch Data
-    const calls = await Call.find(filter)
-    .populate("contact", "fullName phone email company designation")
-    .sort(sort)
-    .skip(skip)
-    .limit(limit)
+  if (!contact) {
+
+    throw new ApiError(
+      HTTP_STATUS.NOT_FOUND,
+      "Contact not found."
+    );
+
+  }
 
 
+  // ========================================
+  // CREATE CALL
+  // ========================================
 
-    // Count
+  const call =
+    await Call.create({
+      owner: ownerId,
+      ...callData,
+    });
 
-    const total = await Call.countDocuments(filter)
 
+  // ========================================
+  // RETURN POPULATED CALL
+  // ========================================
 
+  return await call.populate(
+    "contact",
+    "fullName phone email company designation"
+  );
 
-    // Return 
-   return {
-  calls,
-  pagination: {
-    page: Number(page),
-    limit: Number(limit),
-    total,
-    totalPages: Math.ceil(total / limit),
-    hasNextPage: page * limit < total,
-    hasPrevPage: page > 1,
-  },
 };
 
- }
+
+// ========================================
+// GET MY CALLS
+// ========================================
+
+export const getMyCalls = async (
+  ownerId,
+  query = {}
+) => {
+
+  // ========================================
+  // QUERY PARAMETERS
+  // ========================================
+
+  const {
+    page = 1,
+    limit = 10,
+    search = "",
+    sortBy = "createdAt",
+    sortOrder = "desc",
+    status,
+    callType,
+  } = query;
 
 
- export const getCallById = async (callId, ownerId) => {
-    const call = await Call.findOne({
-        _id: callId,
-        owner: ownerId,
-    }).populate(
+  // ========================================
+  // PAGINATION
+  // ========================================
+
+  const pageNumber =
+    Number(page) || 1;
+
+  const limitNumber =
+    Number(limit) || 10;
+
+  const skip =
+    (pageNumber - 1) *
+    limitNumber;
+
+
+  // ========================================
+  // MONGO FILTER
+  // ========================================
+
+  const filter = {
+    owner: ownerId,
+  };
+
+
+  // ========================================
+  // SEARCH
+  // ========================================
+
+  if (search) {
+
+    filter.notes = {
+      $regex: search,
+      $options: "i",
+    };
+
+  }
+
+
+  // ========================================
+  // STATUS FILTER
+  // ========================================
+
+  if (status) {
+
+    filter.status =
+      status;
+
+  }
+
+
+  // ========================================
+  // CALL TYPE FILTER
+  // ========================================
+
+  if (callType) {
+
+    filter.callType =
+      callType;
+
+  }
+
+
+  // ========================================
+  // SORT
+  // ========================================
+
+  const sort = {
+
+    [sortBy]:
+      sortOrder === "asc"
+        ? 1
+        : -1,
+
+  };
+
+
+  // ========================================
+  // FETCH CALLS
+  // ========================================
+
+  const calls =
+    await Call.find(filter)
+
+      .populate(
         "contact",
         "fullName phone email company designation"
-    )
+      )
 
-    if (!call) {
-        throw new ApiError(
-            HTTP_STATUS.NOT_FOUND,
-            "Call not found."
-        )
-    }
+      .sort(sort)
 
-    return call
- }
+      .skip(skip)
+
+      .limit(limitNumber);
 
 
- export const updateCall = async (callId, ownerId, updateData) => {
-    const existingCall = await Call.findOne({
-        _id: callId,
-        owner: ownerId
-    })
+  // ========================================
+  // COUNT
+  // ========================================
 
-    if (!existingCall) {
-        throw new ApiError(
-            HTTP_STATUS.NOT_FOUND,
-            "call not found."
-        )
-    }
-
-    // Update verify
-    if (updateData.contact) {
-        const contact = await Contact.findOne({
-            _id: updateData.contact,
-            owner: ownerId,
-        })
-
-        if (!contact) {
-            throw new ApiError(
-                HTTP_STATUS.NOT_FOUND,
-                "Contact not found."
-            )
-        }
-    }
-
-    Object.assign(existingCall, updateData)
-
-    await existingCall.save()
-
-    return await existingCall.populate(
-        "contact",
-        "fullName phone email company designation"
-    )
- }
+  const total =
+    await Call.countDocuments(
+      filter
+    );
 
 
- export const deleteCall = async (
+  // ========================================
+  // RETURN
+  // ========================================
+
+  return {
+
+    calls,
+
+    pagination: {
+
+      page:
+        pageNumber,
+
+      limit:
+        limitNumber,
+
+      total,
+
+      totalPages:
+        Math.ceil(
+          total /
+          limitNumber
+        ),
+
+      hasNextPage:
+        pageNumber *
+          limitNumber <
+        total,
+
+      hasPrevPage:
+        pageNumber >
+        1,
+
+    },
+
+  };
+
+};
+
+
+// ========================================
+// GET CALL BY ID
+// ========================================
+
+export const getCallById = async (
   callId,
   ownerId
 ) => {
 
-  const call = await Call.findOneAndDelete({
-    _id: callId,
-    owner: ownerId,
-  });
+  const call =
+    await Call.findOne({
+
+      _id:
+        callId,
+
+      owner:
+        ownerId,
+
+    }).populate(
+
+      "contact",
+
+      "fullName phone email company designation"
+
+    );
+
 
   if (!call) {
+
     throw new ApiError(
       HTTP_STATUS.NOT_FOUND,
       "Call not found."
     );
+
   }
+
+
+  return call;
+
 };
 
 
-export const getCallStats = async (ownerId) => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+// ========================================
+// UPDATE CALL
+// ========================================
 
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1)
+export const updateCall = async (
+  callId,
+  ownerId,
+  updateData
+) => {
+
+  // ========================================
+  // FIND EXISTING CALL
+  // ========================================
+
+  const existingCall =
+    await Call.findOne({
+
+      _id:
+        callId,
+
+      owner:
+        ownerId,
+
+    });
+
+
+  if (!existingCall) {
+
+    throw new ApiError(
+      HTTP_STATUS.NOT_FOUND,
+      "Call not found."
+    );
+
+  }
+
+
+  // ========================================
+  // CHECK CONTACT IF UPDATING
+  // ========================================
+
+  if (
+    updateData.contact
+  ) {
+
+    const contact =
+      await Contact.findOne({
+
+        _id:
+          updateData.contact,
+
+        owner:
+          ownerId,
+
+      });
+
+
+    if (!contact) {
+
+      throw new ApiError(
+        HTTP_STATUS.NOT_FOUND,
+        "Contact not found."
+      );
+
+    }
+
+  }
+
+
+  // ========================================
+  // UPDATE CALL
+  // ========================================
+
+  Object.assign(
+    existingCall,
+    updateData
+  );
+
+
+  await existingCall.save();
+
+
+  // ========================================
+  // RETURN UPDATED CALL
+  // ========================================
+
+  return await existingCall.populate(
+    "contact",
+    "fullName phone email company designation"
+  );
+
+};
+
+
+// ========================================
+// DELETE CALL
+// ========================================
+
+export const deleteCall = async (
+  callId,
+  ownerId
+) => {
+
+  const call =
+    await Call.findOneAndDelete({
+
+      _id:
+        callId,
+
+      owner:
+        ownerId,
+
+    });
+
+
+  if (!call) {
+
+    throw new ApiError(
+      HTTP_STATUS.NOT_FOUND,
+      "Call not found."
+    );
+
+  }
+
+
+  return call;
+
+};
+
+
+// ========================================
+// GET CALL STATS
+// ========================================
+
+export const getCallStats = async (
+  ownerId
+) => {
+
+  // ========================================
+  // DATE RANGE
+  // ========================================
+
+  const today =
+    new Date();
+
+  today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+
+  const tomorrow =
+    new Date(today);
+
+  tomorrow.setDate(
+    tomorrow.getDate() + 1
+  );
+
+
+  // ========================================
+  // FETCH STATS
+  // ========================================
 
   const [
+
     total,
+
     incoming,
+
     outgoing,
+
     answered,
+
     missed,
+
     rejected,
+
     todayCalls,
+
     duration,
-  ] = await Promise.all([
-    // Total Calls
-    Call.countDocuments({
-      owner: ownerId,
-    }),
 
-    // Incoming Calls
-    Call.countDocuments({
-      owner: ownerId,
-      callType: "incoming",
-    }),
+  ] =
+    await Promise.all([
 
-    // Outgoing Calls
-    Call.countDocuments({
-      owner: ownerId,
-      callType: "outgoing",
-    }),
+      // ====================================
+      // TOTAL CALLS
+      // ====================================
 
-    // Answered Calls
-    Call.countDocuments({
-      owner: ownerId,
-      status: "answered",
-    }),
+      Call.countDocuments({
 
-    // Missed Calls
-    Call.countDocuments({
-      owner: ownerId,
-      status: "missed",
-    }),
+        owner:
+          ownerId,
 
-    // Rejected Calls
-    Call.countDocuments({
-      owner: ownerId,
-      status: "rejected",
-    }),
+      }),
 
-    // Today's Calls
-    Call.countDocuments({
-      owner: ownerId,
-      startedAt: {
-        $gte: today,
-        $lt: tomorrow,
-      },
-    }),
 
-    // Total Call Duration
-    Call.aggregate([
-      {
-        $match: {
-          owner: ownerId,
+      // ====================================
+      // INCOMING CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        callType:
+          "incoming",
+
+      }),
+
+
+      // ====================================
+      // OUTGOING CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        callType:
+          "outgoing",
+
+      }),
+
+
+      // ====================================
+      // ANSWERED CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        status:
+          "answered",
+
+      }),
+
+
+      // ====================================
+      // MISSED CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        status:
+          "missed",
+
+      }),
+
+
+      // ====================================
+      // REJECTED CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        status:
+          "rejected",
+
+      }),
+
+
+      // ====================================
+      // TODAY'S CALLS
+      // ====================================
+
+      Call.countDocuments({
+
+        owner:
+          ownerId,
+
+        startedAt: {
+
+          $gte:
+            today,
+
+          $lt:
+            tomorrow,
+
         },
-      },
-      {
-        $group: {
-          _id: null,
-          totalDuration: {
-            $sum: "$duration",
+
+      }),
+
+
+      // ====================================
+      // TOTAL CALL DURATION
+      // ====================================
+
+      Call.aggregate([
+
+        {
+
+          $match: {
+
+            owner:
+              ownerId,
+
           },
+
         },
-      },
-    ]),
-  ])
+
+        {
+
+          $group: {
+
+            _id:
+              null,
+
+            totalDuration: {
+
+              $sum:
+                "$duration",
+
+            },
+
+          },
+
+        },
+
+      ]),
+
+    ])
+
+
+  // ========================================
+  // RETURN STATS
+  // ========================================
 
   return {
+
     total,
+
     incoming,
+
     outgoing,
+
     answered,
+
     missed,
+
     rejected,
-    today: todayCalls,
+
+    today:
+      todayCalls,
+
     totalDuration:
+
       duration.length > 0
-        ? duration[0].totalDuration
+
+        ? duration[0]
+            .totalDuration
+
         : 0,
+
   }
+
 }

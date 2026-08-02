@@ -3,15 +3,19 @@ import Groq from "groq-sdk";
 import Contact from "../contacts/contact.schema.js";
 import Appointment from "../appointments/appointment.schema.js";
 import Call from "../calls/call.schema.js";
+import Reminder from "../reminders/reminder.schema.js";
 
 import {
   createContact,
+  getMyContacts,
   updateContact,
   deleteContact,
 } from "../contacts/contact.service.js";
 
 import {
   createAppointment,
+  getUpcomingAppointments,
+  getAppointmentStats,
   updateAppointment,
   updateAppointmentStatus,
 } from "../appointments/appointment.service.js";
@@ -24,14 +28,16 @@ import {
   deleteCall,
 } from "../calls/call.service.js";
 
-import Reminder from "../reminders/reminder.schema.js";
-
 import {
   createReminder,
   getMyReminders,
   updateReminder,
   deleteReminder,
 } from "../reminders/reminder.service.js";
+
+import {
+  getDashboardStats,
+} from "../dashboard/dashboard.service.js";
 
 import {
   AI_SECRETARY_SYSTEM_PROMPT,
@@ -44,210 +50,122 @@ const groq = new Groq({
 
 
 // ========================================
+// CONSTANTS
+// ========================================
+
+const MODEL =
+  "llama-3.3-70b-versatile";
+
+const MAX_CONTEXT_ITEMS = 20;
+
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+const escapeRegex = (value = "") => {
+  return value.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+};
+
+
+const getContactByName = async (
+  ownerId,
+  contactName
+) => {
+
+  if (!contactName) {
+    return null;
+  }
+
+  return await Contact.findOne({
+    owner: ownerId,
+
+    fullName: {
+      $regex: escapeRegex(
+        contactName
+      ),
+      $options: "i",
+    },
+  });
+};
+
+
+const formatDate = (
+  date
+) => {
+
+  if (!date) {
+    return "Not available";
+  }
+
+  const parsedDate =
+    new Date(date);
+
+  if (
+    Number.isNaN(
+      parsedDate.getTime()
+    )
+  ) {
+    return "Invalid date";
+  }
+
+  return parsedDate
+    .toISOString()
+    .split("T")[0];
+};
+
+
+const formatDateTime = (
+  date
+) => {
+
+  if (!date) {
+    return "Not available";
+  }
+
+  const parsedDate =
+    new Date(date);
+
+  if (
+    Number.isNaN(
+      parsedDate.getTime()
+    )
+  ) {
+    return "Invalid date";
+  }
+
+  return parsedDate.toLocaleString();
+};
+
+
+const isValidDate = (
+  value
+) => {
+
+  if (!value) {
+    return false;
+  }
+
+  const date =
+    new Date(value);
+
+  return !Number.isNaN(
+    date.getTime()
+  );
+};
+
+
+// ========================================
 // AI TOOL DEFINITIONS
 // ========================================
 
 const tools = [
 
   // ========================================
-  // CREATE APPOINTMENT
-  // ========================================
-
-  {
-    type: "function",
-
-    function: {
-      name: "create_appointment",
-
-      description:
-        "Create a new appointment for the authenticated user. Use this when the user explicitly asks to schedule, book, or create an appointment.",
-
-      parameters: {
-        type: "object",
-
-        properties: {
-
-          contactName: {
-            type: "string",
-            description:
-              "Full name of the contact for the appointment.",
-          },
-
-          title: {
-            type: "string",
-            description:
-              "Title of the appointment.",
-          },
-
-          description: {
-            type: "string",
-            description:
-              "Optional description of the appointment.",
-          },
-
-          appointmentDate: {
-            type: "string",
-            description:
-              "Appointment date in YYYY-MM-DD format.",
-          },
-
-          appointmentTime: {
-            type: "string",
-            description:
-              "Appointment time in 24-hour HH:mm format.",
-          },
-
-          duration: {
-            type: "number",
-            description:
-              "Appointment duration in minutes.",
-          },
-
-        },
-
-        required: [
-          "contactName",
-          "title",
-          "appointmentDate",
-          "appointmentTime",
-        ],
-
-        additionalProperties: false,
-      },
-    },
-  },
-
-
-  // ========================================
-  // UPDATE APPOINTMENT
-  // ========================================
-
-  {
-    type: "function",
-
-    function: {
-      name: "update_appointment",
-
-      description:
-        "Update an existing appointment for the authenticated user. Use this when the user explicitly asks to change, update, reschedule, or edit an appointment.",
-
-      parameters: {
-        type: "object",
-
-        properties: {
-
-          contactName: {
-            type: "string",
-            description:
-              "Full name of the contact associated with the appointment.",
-          },
-
-          appointmentTitle: {
-            type: "string",
-            description:
-              "Current title of the appointment that should be updated.",
-          },
-
-          title: {
-            type: "string",
-            description:
-              "New title of the appointment, if provided.",
-          },
-
-          description: {
-            type: "string",
-            description:
-              "New description of the appointment, if provided.",
-          },
-
-          appointmentDate: {
-            type: "string",
-            description:
-              "New appointment date in YYYY-MM-DD format, if provided.",
-          },
-
-          appointmentTime: {
-            type: "string",
-            description:
-              "New appointment time in 24-hour HH:mm format, if provided.",
-          },
-
-          duration: {
-            type: "number",
-            description:
-              "New appointment duration in minutes, if provided.",
-          },
-
-          status: {
-            type: "string",
-            enum: [
-              "scheduled",
-              "completed",
-              "cancelled",
-              "missed",
-            ],
-            description:
-              "New appointment status, if provided.",
-          },
-
-        },
-
-        required: [
-          "contactName",
-          "appointmentTitle",
-        ],
-
-        additionalProperties: false,
-      },
-    },
-  },
-
-
-  // ========================================
-  // CANCEL APPOINTMENT
-  // ========================================
-
-  {
-    type: "function",
-
-    function: {
-      name: "cancel_appointment",
-
-      description:
-        "Cancel an existing appointment for the authenticated user. Use this when the user explicitly asks to cancel an appointment.",
-
-      parameters: {
-        type: "object",
-
-        properties: {
-
-          contactName: {
-            type: "string",
-            description:
-              "Full name of the contact associated with the appointment.",
-          },
-
-          appointmentTitle: {
-            type: "string",
-            description:
-              "Title of the appointment that should be cancelled.",
-          },
-
-        },
-
-        required: [
-          "contactName",
-          "appointmentTitle",
-        ],
-
-        additionalProperties: false,
-      },
-    },
-  },
-
-
-  // ========================================
-  // CREATE CONTACT
+  // CONTACTS
   // ========================================
 
   {
@@ -257,7 +175,7 @@ const tools = [
       name: "create_contact",
 
       description:
-        "Create a new contact for the authenticated user. Use this when the user explicitly asks to add, create, or save a new contact.",
+        "Create a new contact for the authenticated user. Use only when the user explicitly asks to add, create, or save a contact.",
 
       parameters: {
         type: "object",
@@ -285,13 +203,13 @@ const tools = [
           company: {
             type: "string",
             description:
-              "Company where the contact works.",
+              "Company name.",
           },
 
           designation: {
             type: "string",
             description:
-              "Job designation of the contact.",
+              "Job designation.",
           },
 
         },
@@ -308,9 +226,43 @@ const tools = [
   },
 
 
-  // ========================================
-  // UPDATE CONTACT
-  // ========================================
+  {
+    type: "function",
+
+    function: {
+      name: "get_contacts",
+
+      description:
+        "Get contacts belonging to the authenticated user. Use when the user asks to see, list, find, or search contacts.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          search: {
+            type: "string",
+            description:
+              "Optional name, email, phone, company, or designation search text.",
+          },
+
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+            description:
+              "Maximum contacts to return. Default is 20.",
+          },
+
+        },
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
 
   {
     type: "function",
@@ -319,7 +271,7 @@ const tools = [
       name: "update_contact",
 
       description:
-        "Update an existing contact for the authenticated user. Use this when the user explicitly asks to change, update, or edit contact information.",
+        "Update an existing contact. Use only when the user explicitly asks to update or edit contact information.",
 
       parameters: {
         type: "object",
@@ -329,37 +281,27 @@ const tools = [
           contactName: {
             type: "string",
             description:
-              "Full name of the existing contact that should be updated.",
+              "Current full name of the contact.",
           },
 
           fullName: {
             type: "string",
-            description:
-              "New full name of the contact, if the user wants to change it.",
           },
 
           phone: {
             type: "string",
-            description:
-              "New phone number of the contact, if provided.",
           },
 
           email: {
             type: "string",
-            description:
-              "New email address of the contact, if provided.",
           },
 
           company: {
             type: "string",
-            description:
-              "New company name, if provided.",
           },
 
           designation: {
             type: "string",
-            description:
-              "New job designation, if provided.",
           },
 
         },
@@ -373,10 +315,6 @@ const tools = [
     },
   },
 
-
-  // ========================================
-  // DELETE CONTACT
-  // ========================================
 
   {
     type: "function",
@@ -385,7 +323,7 @@ const tools = [
       name: "delete_contact",
 
       description:
-        "Delete an existing contact for the authenticated user. Use this only when the user explicitly asks to delete or remove a contact.",
+        "Delete an existing contact. Use only when the user explicitly asks to delete or remove a contact.",
 
       parameters: {
         type: "object",
@@ -394,8 +332,6 @@ const tools = [
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact that should be deleted.",
           },
 
         },
@@ -411,7 +347,222 @@ const tools = [
 
 
   // ========================================
-  // CREATE CALL
+  // APPOINTMENTS
+  // ========================================
+
+  {
+    type: "function",
+
+    function: {
+      name: "create_appointment",
+
+      description:
+        "Create a new appointment. Use only when the user explicitly asks to schedule, book, or create an appointment.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+          },
+
+          title: {
+            type: "string",
+          },
+
+          description: {
+            type: "string",
+          },
+
+          appointmentDate: {
+            type: "string",
+            description:
+              "Appointment date in YYYY-MM-DD format.",
+          },
+
+          appointmentTime: {
+            type: "string",
+            description:
+              "Appointment time in HH:mm 24-hour format.",
+          },
+
+          duration: {
+            type: "number",
+            description:
+              "Duration in minutes.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "title",
+          "appointmentDate",
+          "appointmentTime",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  {
+    type: "function",
+
+    function: {
+      name: "get_upcoming_appointments",
+
+      description:
+        "Get upcoming appointments for the authenticated user. Use when the user asks about upcoming, scheduled, or future appointments.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 50,
+          },
+
+        },
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  {
+    type: "function",
+
+    function: {
+      name: "get_appointment_stats",
+
+      description:
+        "Get appointment statistics for the authenticated user.",
+
+      parameters: {
+        type: "object",
+
+        properties: {},
+
+        required: [],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  {
+    type: "function",
+
+    function: {
+      name: "update_appointment",
+
+      description:
+        "Update or reschedule an existing appointment. Use only when explicitly requested.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+          },
+
+          appointmentTitle: {
+            type: "string",
+          },
+
+          title: {
+            type: "string",
+          },
+
+          description: {
+            type: "string",
+          },
+
+          appointmentDate: {
+            type: "string",
+          },
+
+          appointmentTime: {
+            type: "string",
+          },
+
+          duration: {
+            type: "number",
+          },
+
+          status: {
+            type: "string",
+            enum: [
+              "scheduled",
+              "completed",
+              "cancelled",
+              "missed",
+            ],
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  {
+    type: "function",
+
+    function: {
+      name: "cancel_appointment",
+
+      description:
+        "Cancel an existing scheduled appointment. Use only when explicitly requested.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          contactName: {
+            type: "string",
+          },
+
+          appointmentTitle: {
+            type: "string",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  // ========================================
+  // CALLS
   // ========================================
 
   {
@@ -421,7 +572,7 @@ const tools = [
       name: "create_call",
 
       description:
-        "Create a new call record for the authenticated user. Use this only when the user explicitly asks to log, record, or create a call.",
+        "Create a call record. Use only when the user explicitly asks to log or record a call.",
 
       parameters: {
         type: "object",
@@ -430,8 +581,6 @@ const tools = [
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact associated with the call.",
           },
 
           callType: {
@@ -440,8 +589,6 @@ const tools = [
               "incoming",
               "outgoing",
             ],
-            description:
-              "Whether the call was incoming or outgoing.",
           },
 
           status: {
@@ -451,32 +598,22 @@ const tools = [
               "missed",
               "rejected",
             ],
-            description:
-              "Status of the call.",
           },
 
           duration: {
             type: "number",
-            description:
-              "Call duration in seconds.",
           },
 
           notes: {
             type: "string",
-            description:
-              "Optional notes about the call.",
           },
 
           startedAt: {
             type: "string",
-            description:
-              "Call start date and time in ISO 8601 format.",
           },
 
           endedAt: {
             type: "string",
-            description:
-              "Optional call end date and time in ISO 8601 format.",
           },
 
         },
@@ -494,10 +631,6 @@ const tools = [
   },
 
 
-  // ========================================
-  // GET RECENT CALLS
-  // ========================================
-
   {
     type: "function",
 
@@ -505,7 +638,7 @@ const tools = [
       name: "get_recent_calls",
 
       description:
-        "Get recent call records of the authenticated user. Use this when the user explicitly asks about recent calls, latest calls, call history, or recent call records.",
+        "Get recent call records. Use when the user asks about recent calls, latest calls, or call history.",
 
       parameters: {
         type: "object",
@@ -516,8 +649,6 @@ const tools = [
             type: "integer",
             minimum: 1,
             maximum: 50,
-            description:
-              "Maximum number of recent calls to return. Must be a number between 1 and 50. If not provided, use 10.",
           },
 
         },
@@ -530,10 +661,6 @@ const tools = [
   },
 
 
-  // ========================================
-  // GET CALL STATS
-  // ========================================
-
   {
     type: "function",
 
@@ -541,7 +668,7 @@ const tools = [
       name: "get_call_stats",
 
       description:
-        "Get call statistics for the authenticated user. Use this when the user asks about total calls, incoming calls, outgoing calls, answered calls, missed calls, rejected calls, today's calls, or total call duration.",
+        "Get call statistics including total, incoming, outgoing, answered, missed, rejected, today's calls, and total duration.",
 
       parameters: {
         type: "object",
@@ -556,10 +683,6 @@ const tools = [
   },
 
 
-  // ========================================
-  // UPDATE CALL
-  // ========================================
-
   {
     type: "function",
 
@@ -567,7 +690,7 @@ const tools = [
       name: "update_call",
 
       description:
-        "Update an existing call record for the authenticated user. Use this only when the user explicitly asks to update, edit, or change an existing call record.",
+        "Update an existing call record. Use only when explicitly requested.",
 
       parameters: {
         type: "object",
@@ -576,14 +699,10 @@ const tools = [
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact associated with the call.",
           },
 
           callId: {
             type: "string",
-            description:
-              "MongoDB ObjectId of the call record, if available.",
           },
 
           callType: {
@@ -605,26 +724,18 @@ const tools = [
 
           duration: {
             type: "number",
-            description:
-              "Updated call duration in seconds.",
           },
 
           notes: {
             type: "string",
-            description:
-              "Updated notes for the call.",
           },
 
           startedAt: {
             type: "string",
-            description:
-              "Updated call start date and time in ISO 8601 format.",
           },
 
           endedAt: {
             type: "string",
-            description:
-              "Updated call end date and time in ISO 8601 format.",
           },
 
         },
@@ -638,10 +749,6 @@ const tools = [
     },
   },
 
-
-  // ========================================
-  // DELETE CALL
-  // ========================================
 
   {
     type: "function",
@@ -650,7 +757,7 @@ const tools = [
       name: "delete_call",
 
       description:
-        "Delete an existing call record for the authenticated user. Use this only when the user explicitly asks to delete or remove a call record.",
+        "Delete an existing call record. Use only when explicitly requested.",
 
       parameters: {
         type: "object",
@@ -659,14 +766,10 @@ const tools = [
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact associated with the call.",
           },
 
           callId: {
             type: "string",
-            description:
-              "MongoDB ObjectId of the call record, if available.",
           },
 
         },
@@ -682,7 +785,7 @@ const tools = [
 
 
   // ========================================
-  // CREATE REMINDER
+  // REMINDERS
   // ========================================
 
   {
@@ -692,7 +795,7 @@ const tools = [
       name: "create_reminder",
 
       description:
-        "Create a reminder for an existing appointment. Use this when the user explicitly asks to create, add, or set a reminder for an appointment.",
+        "Create a reminder for an existing appointment.",
 
       parameters: {
         type: "object",
@@ -701,14 +804,10 @@ const tools = [
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact associated with the appointment.",
           },
 
           appointmentTitle: {
             type: "string",
-            description:
-              "Title of the appointment for which the reminder should be created.",
           },
 
           reminderType: {
@@ -717,14 +816,12 @@ const tools = [
               "email",
               "whatsapp",
             ],
-            description:
-              "Reminder delivery type.",
           },
 
           reminderTime: {
             type: "string",
             description:
-              "Reminder date and time in ISO 8601 format.",
+              "Reminder time in ISO 8601 format.",
           },
 
         },
@@ -742,10 +839,6 @@ const tools = [
   },
 
 
-  // ========================================
-  // GET REMINDERS
-  // ========================================
-
   {
     type: "function",
 
@@ -753,7 +846,7 @@ const tools = [
       name: "get_reminders",
 
       description:
-        "Get reminders belonging to the authenticated user. Use this when the user explicitly asks about reminders, upcoming reminders, scheduled reminders, or reminder history.",
+        "Get reminders for the authenticated user.",
 
       parameters: {
         type: "object",
@@ -768,10 +861,6 @@ const tools = [
   },
 
 
-  // ========================================
-  // UPDATE REMINDER
-  // ========================================
-
   {
     type: "function",
 
@@ -779,7 +868,7 @@ const tools = [
       name: "update_reminder",
 
       description:
-        "Update an existing reminder belonging to the authenticated user. Use this when the user explicitly asks to update, edit, or change a reminder.",
+        "Update an existing reminder.",
 
       parameters: {
         type: "object",
@@ -788,20 +877,14 @@ const tools = [
 
           reminderId: {
             type: "string",
-            description:
-              "MongoDB ObjectId of the reminder, if available.",
           },
 
           contactName: {
             type: "string",
-            description:
-              "Full name of the contact associated with the reminder.",
           },
 
           appointmentTitle: {
             type: "string",
-            description:
-              "Title of the appointment associated with the reminder.",
           },
 
           reminderType: {
@@ -810,20 +893,53 @@ const tools = [
               "email",
               "whatsapp",
             ],
-            description:
-              "Updated reminder delivery type.",
           },
 
           reminderTime: {
             type: "string",
-            description:
-              "Updated reminder date and time in ISO 8601 format.",
           },
 
           sent: {
             type: "boolean",
-            description:
-              "Whether the reminder has been sent.",
+          },
+
+        },
+
+        required: [
+          "contactName",
+          "appointmentTitle",
+        ],
+
+        additionalProperties: false,
+      },
+    },
+  },
+
+
+  {
+    type: "function",
+
+    function: {
+      name: "delete_reminder",
+
+      description:
+        "Delete an existing reminder.",
+
+      parameters: {
+        type: "object",
+
+        properties: {
+
+          reminderId: {
+            type: "string",
+          },
+
+          contactName: {
+            type: "string",
+          },
+
+          appointmentTitle: {
+            type: "string",
           },
 
         },
@@ -840,47 +956,24 @@ const tools = [
 
 
   // ========================================
-  // DELETE REMINDER
+  // DASHBOARD
   // ========================================
 
   {
     type: "function",
 
     function: {
-      name: "delete_reminder",
+      name: "get_dashboard_stats",
 
       description:
-        "Delete an existing reminder belonging to the authenticated user. Use this when the user explicitly asks to delete, remove, or cancel a reminder.",
+        "Get overall dashboard statistics for the authenticated user. Use when the user asks for an overview, dashboard summary, or overall business/activity statistics.",
 
       parameters: {
         type: "object",
 
-        properties: {
+        properties: {},
 
-          reminderId: {
-            type: "string",
-            description:
-              "MongoDB ObjectId of the reminder, if available.",
-          },
-
-          contactName: {
-            type: "string",
-            description:
-              "Full name of the contact associated with the reminder.",
-          },
-
-          appointmentTitle: {
-            type: "string",
-            description:
-              "Title of the appointment associated with the reminder.",
-          },
-
-        },
-
-        required: [
-          "contactName",
-          "appointmentTitle",
-        ],
+        required: [],
 
         additionalProperties: false,
       },
@@ -891,22 +984,18 @@ const tools = [
 
 
 // ========================================
-// AI CHAT SERVICE
+// FETCH USER CONTEXT
 // ========================================
 
-export const chatWithAI = async (
-  message,
+const getUserContext = async (
   ownerId
 ) => {
-
-  // ========================================
-  // FETCH USER DATA
-  // ========================================
 
   const [
     contacts,
     appointments,
     calls,
+    reminders,
   ] = await Promise.all([
 
     Contact.find({
@@ -915,8 +1004,14 @@ export const chatWithAI = async (
       .select(
         "fullName phone email company designation"
       )
-      .limit(20)
+      .sort({
+        createdAt: -1,
+      })
+      .limit(
+        MAX_CONTEXT_ITEMS
+      )
       .lean(),
+
 
     Appointment.find({
       owner: ownerId,
@@ -928,8 +1023,11 @@ export const chatWithAI = async (
       .sort({
         appointmentDate: 1,
       })
-      .limit(20)
+      .limit(
+        MAX_CONTEXT_ITEMS
+      )
       .lean(),
+
 
     Call.find({
       owner: ownerId,
@@ -941,207 +1039,408 @@ export const chatWithAI = async (
       .sort({
         createdAt: -1,
       })
-      .limit(20)
+      .limit(
+        MAX_CONTEXT_ITEMS
+      )
+      .lean(),
+
+
+    Reminder.find({
+      owner: ownerId,
+    })
+      .populate({
+        path: "appointment",
+        populate: {
+          path: "contact",
+          select:
+            "fullName phone email company designation",
+        },
+      })
+      .sort({
+        reminderTime: 1,
+      })
+      .limit(
+        MAX_CONTEXT_ITEMS
+      )
       .lean(),
 
   ]);
 
 
-  // ========================================
-  // CREATE USER CONTEXT
-  // ========================================
+  return {
 
-  const userContext = `
+    contacts,
+
+    appointments,
+
+    calls,
+
+    reminders,
+
+  };
+
+};
+
+
+// ========================================
+// BUILD USER CONTEXT
+// ========================================
+
+const buildUserContext = (
+  data
+) => {
+
+  return `
 USER CONTACTS:
 ${JSON.stringify(
-  contacts,
+  data.contacts,
   null,
   2
 )}
 
 USER APPOINTMENTS:
 ${JSON.stringify(
-  appointments,
+  data.appointments,
   null,
   2
 )}
 
 USER CALLS:
 ${JSON.stringify(
-  calls,
+  data.calls,
+  null,
+  2
+)}
+
+USER REMINDERS:
+${JSON.stringify(
+  data.reminders,
   null,
   2
 )}
 `;
 
+};
+
+
+// ========================================
+// EXECUTE TOOL
+// ========================================
+
+const executeTool = async (
+  toolName,
+  args,
+  ownerId
+) => {
 
   // ========================================
-  // FIRST AI REQUEST
-  // ========================================
-
-  const completion =
-    await groq.chat.completions.create({
-
-      messages: [
-
-        {
-          role: "system",
-
-          content: `
-${AI_SECRETARY_SYSTEM_PROMPT}
-
-CURRENT DATE:
-${new Date().toISOString()}
-
-IMPORTANT:
-- The authenticated user's ID is ${ownerId}.
-- You can answer questions using the user's data.
-
-APPOINTMENT RULES:
-- If the user explicitly asks you to create an appointment, use create_appointment.
-- If the user explicitly asks you to update, edit, reschedule, or change an appointment, use update_appointment.
-- If the user explicitly asks you to cancel an appointment, use cancel_appointment.
-- Never create an appointment unless the user explicitly asks.
-- Never update an appointment unless the user explicitly asks.
-- Never cancel an appointment unless the user explicitly asks.
-
-CONTACT RULES:
-- If the user explicitly asks you to create or add a contact, use create_contact.
-- If the user explicitly asks you to update or edit a contact, use update_contact.
-- If the user explicitly asks you to delete or remove a contact, use delete_contact.
-- Never create a contact unless the user explicitly asks.
-- Never update a contact unless the user explicitly asks.
-- Never delete a contact unless the user explicitly asks.
-
-CALL RULES:
-- If the user explicitly asks to create, log, record, or save a call, use create_call.
-- If the user explicitly asks about recent calls, latest calls, call history, or recent call records, use get_recent_calls.
-- If the user explicitly asks for call statistics or call analytics, use get_call_stats.
-- If the user explicitly asks to update, edit, or change an existing call record, use update_call.
-- If the user explicitly asks to delete or remove an existing call record, use delete_call.
-
-- Never create a call unless explicitly requested.
-- Never update a call unless explicitly requested.
-- Never delete a call unless explicitly requested.
-- Never invent call information.
-
-- For get_recent_calls, limit must always be a number between 1 and 50.
-- If the user does not provide a limit, use 10.
-
-- For update_call and delete_call:
-  - Always identify the correct contact first.
-  - Only operate on calls belonging to the authenticated user.
-  - If callId is provided, use it to identify the exact call.
-  - If callId is not provided, use the latest call for the specified contact.
-  - Never modify or delete another user's call.
-
-REMINDER RULES:
-- If the user explicitly asks to create, add, or set a reminder for an existing appointment, use create_reminder.
-- If the user explicitly asks about reminders, upcoming reminders, scheduled reminders, or reminder history, use get_reminders.
-- If the user explicitly asks to update, edit, or change a reminder, use update_reminder.
-- If the user explicitly asks to delete, remove, or cancel a reminder, use delete_reminder.
-
-- Never create a reminder unless explicitly requested.
-- Never update a reminder unless explicitly requested.
-- Never delete a reminder unless explicitly requested.
-
-- Reminders must always belong to an existing appointment.
-- Before creating a reminder, identify the correct contact and appointment.
-- Only operate on reminders belonging to the authenticated user.
-- reminderType must be either email or whatsapp.
-- reminderTime must be a valid ISO 8601 date-time.
-
-- For update_reminder and delete_reminder:
-  - If reminderId is provided, use it to identify the exact reminder.
-  - If reminderId is not provided, use contactName and appointmentTitle to identify the reminder.
-  - Never modify or delete another user's reminder.
-
-GENERAL RULES:
-- Never invent contact information.
-- If a required value is missing, ask the user for it.
-- Appointment date must be YYYY-MM-DD.
-- Appointment time must be HH:mm in 24-hour format.
-- Call type must be either incoming or outgoing.
-- Call status must be either answered, missed, or rejected.
-- startedAt must be a valid ISO 8601 date-time.
-`,
-        },
-
-
-        {
-          role: "system",
-
-          content: `
-Here is the authenticated user's current application data.
-
-${userContext}
-`,
-        },
-
-
-        {
-          role: "user",
-
-          content:
-            message,
-        },
-
-      ],
-
-      model:
-        "llama-3.3-70b-versatile",
-
-      temperature:
-        0.3,
-
-      max_tokens:
-        700,
-
-      tools,
-
-      tool_choice:
-        "auto",
-
-    });
-
-
-  const assistantMessage =
-    completion.choices[0].message;
-
-
-  // ========================================
-  // NORMAL AI RESPONSE
+  // CREATE CONTACT
   // ========================================
 
   if (
-    !assistantMessage.tool_calls ||
-    assistantMessage.tool_calls.length === 0
+    toolName ===
+    "create_contact"
   ) {
 
-    return (
-      assistantMessage.content ||
-      "I couldn't process your request."
-    );
+    const existingContact =
+      await Contact.findOne({
+
+        owner: ownerId,
+
+        $or: [
+
+          {
+            email:
+              args.email,
+          },
+
+          {
+            phone:
+              args.phone,
+          },
+
+        ],
+
+      });
+
+
+    if (existingContact) {
+
+      return {
+        success: false,
+
+        message:
+          "A contact already exists with this email or phone number.",
+
+        contact: {
+          fullName:
+            existingContact.fullName,
+
+          email:
+            existingContact.email,
+
+          phone:
+            existingContact.phone,
+        },
+      };
+
+    }
+
+
+    const contact =
+      await createContact(
+
+        {
+          fullName:
+            args.fullName,
+
+          phone:
+            args.phone,
+
+          email:
+            args.email,
+
+          company:
+            args.company ||
+            "",
+
+          designation:
+            args.designation ||
+            "",
+        },
+
+        ownerId
+
+      );
+
+
+    return {
+
+      success: true,
+
+      message:
+        "Contact created successfully.",
+
+      contact,
+
+    };
 
   }
 
 
   // ========================================
-  // HANDLE TOOL CALL
+  // GET CONTACTS
   // ========================================
 
-  const toolCall =
-    assistantMessage.tool_calls[0];
+  if (
+    toolName ===
+    "get_contacts"
+  ) {
+
+    const search =
+      args.search ||
+      "";
+
+    const limit =
+      Math.min(
+        Math.max(
+          Number(
+            args.limit
+          ) || 20,
+          1
+        ),
+        50
+      );
 
 
-  const toolName =
-    toolCall.function.name;
+    const result =
+      await getMyContacts(
+
+        ownerId,
+
+        search,
+
+        1,
+
+        limit
+
+      );
 
 
-  const args =
-    JSON.parse(
-      toolCall.function.arguments
-    );
+    return {
+
+      success: true,
+
+      data: result,
+
+    };
+
+  }
+
+
+  // ========================================
+  // UPDATE CONTACT
+  // ========================================
+
+  if (
+    toolName ===
+    "update_contact"
+  ) {
+
+    const contact =
+      await getContactByName(
+
+        ownerId,
+
+        args.contactName
+
+      );
+
+
+    if (!contact) {
+
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
+
+    }
+
+
+    const updateData = {};
+
+
+    const fields = [
+      "fullName",
+      "phone",
+      "email",
+      "company",
+      "designation",
+    ];
+
+
+    for (
+      const field of fields
+    ) {
+
+      if (
+        args[field] !==
+        undefined
+      ) {
+
+        updateData[field] =
+          args[field];
+
+      }
+
+    }
+
+
+    if (
+      Object.keys(
+        updateData
+      ).length === 0
+    ) {
+
+      return {
+
+        success: false,
+
+        message:
+          "No contact fields were provided for update.",
+
+      };
+
+    }
+
+
+    const updatedContact =
+      await updateContact(
+
+        contact._id,
+
+        ownerId,
+
+        updateData
+
+      );
+
+
+    return {
+
+      success: true,
+
+      message:
+        "Contact updated successfully.",
+
+      contact:
+        updatedContact,
+
+    };
+
+  }
+
+
+  // ========================================
+  // DELETE CONTACT
+  // ========================================
+
+  if (
+    toolName ===
+    "delete_contact"
+  ) {
+
+    const contact =
+      await getContactByName(
+
+        ownerId,
+
+        args.contactName
+
+      );
+
+
+    if (!contact) {
+
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
+
+    }
+
+
+    const deletedContact =
+      await deleteContact(
+
+        contact._id,
+
+        ownerId
+
+      );
+
+
+    return {
+
+      success: true,
+
+      message:
+        "Contact deleted successfully.",
+
+      contact:
+        deletedContact,
+
+    };
+
+  }
 
 
   // ========================================
@@ -1154,29 +1453,43 @@ ${userContext}
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
+      return {
 
-Please make sure the contact exists before creating the appointment.
-`;
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
+
+    }
+
+
+    if (
+      !isValidDate(
+        args.appointmentDate
+      )
+    ) {
+
+      return {
+
+        success: false,
+
+        message:
+          "Invalid appointment date.",
+
+      };
 
     }
 
@@ -1215,17 +1528,84 @@ Please make sure the contact exists before creating the appointment.
       );
 
 
-    return `
-Appointment created successfully.
+    return {
 
-Title: ${appointment.title}
-Contact: ${contact.fullName}
-Date: ${args.appointmentDate}
-Time: ${args.appointmentTime}
-Duration: ${appointment.duration} minutes
+      success: true,
 
-A reminder has also been automatically created for this appointment.
-`;
+      message:
+        "Appointment created successfully.",
+
+      appointment,
+
+    };
+
+  }
+
+
+  // ========================================
+  // GET UPCOMING APPOINTMENTS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_upcoming_appointments"
+  ) {
+
+    const limit =
+      Math.min(
+        Math.max(
+          Number(
+            args.limit
+          ) || 10,
+          1
+        ),
+        50
+      );
+
+
+    const appointments =
+      await getUpcomingAppointments(
+
+        ownerId,
+
+        limit
+
+      );
+
+
+    return {
+
+      success: true,
+
+      appointments,
+
+    };
+
+  }
+
+
+  // ========================================
+  // GET APPOINTMENT STATS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_appointment_stats"
+  ) {
+
+    const stats =
+      await getAppointmentStats(
+        ownerId
+      );
+
+
+    return {
+
+      success: true,
+
+      stats,
+
+    };
 
   }
 
@@ -1240,27 +1620,25 @@ A reminder has also been automatically created for this appointment.
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
@@ -1268,15 +1646,16 @@ I couldn't find a contact named "${args.contactName}".
     const appointment =
       await Appointment.findOne({
 
-        owner:
-          ownerId,
+        owner: ownerId,
 
         contact:
           contact._id,
 
         title: {
           $regex:
-            args.appointmentTitle,
+            escapeRegex(
+              args.appointmentTitle
+            ),
 
           $options:
             "i",
@@ -1287,9 +1666,14 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!appointment) {
 
-      return `
-I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Appointment "${args.appointmentTitle}" not found for ${contact.fullName}.`,
+
+      };
 
     }
 
@@ -1298,7 +1682,8 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.title !== undefined
+      args.title !==
+      undefined
     ) {
 
       updateData.title =
@@ -1308,7 +1693,8 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.description !== undefined
+      args.description !==
+      undefined
     ) {
 
       updateData.description =
@@ -1318,8 +1704,27 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.appointmentDate !== undefined
+      args.appointmentDate !==
+      undefined
     ) {
+
+      if (
+        !isValidDate(
+          args.appointmentDate
+        )
+      ) {
+
+        return {
+
+          success: false,
+
+          message:
+            "Invalid appointment date.",
+
+        };
+
+      }
+
 
       updateData.appointmentDate =
         new Date(
@@ -1330,7 +1735,8 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.appointmentTime !== undefined
+      args.appointmentTime !==
+      undefined
     ) {
 
       updateData.appointmentTime =
@@ -1340,7 +1746,8 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.duration !== undefined
+      args.duration !==
+      undefined
     ) {
 
       updateData.duration =
@@ -1350,7 +1757,8 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
 
     if (
-      args.status !== undefined
+      args.status !==
+      undefined
     ) {
 
       updateData.status =
@@ -1365,9 +1773,14 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
       ).length === 0
     ) {
 
-      return `
-I found the appointment, but I couldn't determine what information you want to update.
-`;
+      return {
+
+        success: false,
+
+        message:
+          "No appointment fields were provided for update.",
+
+      };
 
     }
 
@@ -1384,22 +1797,17 @@ I found the appointment, but I couldn't determine what information you want to u
       );
 
 
-    return `
-Appointment updated successfully.
+    return {
 
-Title: ${updatedAppointment.title}
-Contact: ${updatedAppointment.contact.fullName}
-Date: ${new Date(
-  updatedAppointment.appointmentDate
-)
-  .toISOString()
-  .split("T")[0]}
-Time: ${updatedAppointment.appointmentTime}
-Duration: ${updatedAppointment.duration} minutes
-Status: ${updatedAppointment.status}
+      success: true,
 
-The associated reminder has been automatically synchronized.
-`;
+      message:
+        "Appointment updated successfully.",
+
+      appointment:
+        updatedAppointment,
+
+    };
 
   }
 
@@ -1414,27 +1822,25 @@ The associated reminder has been automatically synchronized.
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
@@ -1442,15 +1848,16 @@ I couldn't find a contact named "${args.contactName}".
     const appointment =
       await Appointment.findOne({
 
-        owner:
-          ownerId,
+        owner: ownerId,
 
         contact:
           contact._id,
 
         title: {
           $regex:
-            args.appointmentTitle,
+            escapeRegex(
+              args.appointmentTitle
+            ),
 
           $options:
             "i",
@@ -1464,9 +1871,14 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!appointment) {
 
-      return `
-I couldn't find a scheduled appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Scheduled appointment "${args.appointmentTitle}" not found for ${contact.fullName}.`,
+
+      };
 
     }
 
@@ -1483,303 +1895,28 @@ I couldn't find a scheduled appointment titled "${args.appointmentTitle}" for ${
       );
 
 
-    await Reminder.deleteOne({
-
-      appointment:
-        appointment._id,
+    await Reminder.deleteMany({
 
       owner:
         ownerId,
 
+      appointment:
+        appointment._id,
+
     });
 
 
-    return `
-Appointment cancelled successfully.
+    return {
 
-Title: ${cancelledAppointment.title}
-Contact: ${contact.fullName}
-Date: ${new Date(
-  cancelledAppointment.appointmentDate
-)
-  .toISOString()
-  .split("T")[0]}
-Time: ${cancelledAppointment.appointmentTime}
-Status: ${cancelledAppointment.status}
+      success: true,
 
-The associated reminder has also been removed.
-`;
+      message:
+        "Appointment cancelled successfully.",
 
-  }
+      appointment:
+        cancelledAppointment,
 
-
-  // ========================================
-  // CREATE CONTACT
-  // ========================================
-
-  if (
-    toolName ===
-    "create_contact"
-  ) {
-
-    const existingContact =
-      await Contact.findOne({
-
-        owner:
-          ownerId,
-
-        $or: [
-
-          {
-            email:
-              args.email,
-          },
-
-          {
-            phone:
-              args.phone,
-          },
-
-        ],
-
-      });
-
-
-    if (existingContact) {
-
-      return `
-A contact already exists with this email or phone number.
-
-Name: ${existingContact.fullName}
-Email: ${existingContact.email}
-Phone: ${existingContact.phone}
-`;
-
-    }
-
-
-    const contact =
-      await createContact(
-
-        {
-
-          fullName:
-            args.fullName,
-
-          phone:
-            args.phone,
-
-          email:
-            args.email,
-
-          company:
-            args.company ||
-            "",
-
-          designation:
-            args.designation ||
-            "",
-
-        },
-
-        ownerId
-
-      );
-
-
-    return `
-Contact created successfully.
-
-Name: ${contact.fullName}
-Phone: ${contact.phone}
-Email: ${contact.email}
-Company: ${contact.company || "Not provided"}
-Designation: ${contact.designation || "Not provided"}
-`;
-
-  }
-
-
-  // ========================================
-  // UPDATE CONTACT
-  // ========================================
-
-  if (
-    toolName ===
-    "update_contact"
-  ) {
-
-    const contact =
-      await Contact.findOne({
-
-        owner:
-          ownerId,
-
-        fullName: {
-          $regex:
-            args.contactName,
-
-          $options:
-            "i",
-        },
-
-      });
-
-
-    if (!contact) {
-
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
-
-    }
-
-
-    const updateData = {};
-
-
-    if (
-      args.fullName !== undefined
-    ) {
-
-      updateData.fullName =
-        args.fullName;
-
-    }
-
-
-    if (
-      args.phone !== undefined
-    ) {
-
-      updateData.phone =
-        args.phone;
-
-    }
-
-
-    if (
-      args.email !== undefined
-    ) {
-
-      updateData.email =
-        args.email;
-
-    }
-
-
-    if (
-      args.company !== undefined
-    ) {
-
-      updateData.company =
-        args.company;
-
-    }
-
-
-    if (
-      args.designation !== undefined
-    ) {
-
-      updateData.designation =
-        args.designation;
-
-    }
-
-
-    if (
-      Object.keys(
-        updateData
-      ).length === 0
-    ) {
-
-      return `
-I found the contact, but I couldn't determine what information you want to update.
-`;
-
-    }
-
-
-    const updatedContact =
-      await updateContact(
-
-        contact._id,
-
-        ownerId,
-
-        updateData
-
-      );
-
-
-    return `
-Contact updated successfully.
-
-Name: ${updatedContact.fullName}
-Phone: ${updatedContact.phone}
-Email: ${updatedContact.email}
-Company: ${updatedContact.company || "Not provided"}
-Designation: ${updatedContact.designation || "Not provided"}
-`;
-
-  }
-
-
-  // ========================================
-  // DELETE CONTACT
-  // ========================================
-
-  if (
-    toolName ===
-    "delete_contact"
-  ) {
-
-    const contact =
-      await Contact.findOne({
-
-        owner:
-          ownerId,
-
-        fullName: {
-          $regex:
-            args.contactName,
-
-          $options:
-            "i",
-        },
-
-      });
-
-
-    if (!contact) {
-
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
-
-    }
-
-
-    const deletedContact =
-      await deleteContact(
-
-        contact._id,
-
-        ownerId
-
-      );
-
-
-    return `
-Contact deleted successfully.
-
-Name: ${deletedContact.fullName}
-Phone: ${deletedContact.phone}
-Email: ${deletedContact.email}
-Company: ${deletedContact.company || "Not provided"}
-Designation: ${deletedContact.designation || "Not provided"}
-`;
+    };
 
   }
 
@@ -1794,29 +1931,43 @@ Designation: ${deletedContact.designation || "Not provided"}
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
+      return {
 
-Please make sure the contact exists before creating the call record.
-`;
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
+
+    }
+
+
+    if (
+      !isValidDate(
+        args.startedAt
+      )
+    ) {
+
+      return {
+
+        success: false,
+
+        message:
+          "Invalid startedAt date.",
+
+      };
 
     }
 
@@ -1862,25 +2013,16 @@ Please make sure the contact exists before creating the call record.
       );
 
 
-    return `
-Call record created successfully.
+    return {
 
-Contact: ${contact.fullName}
-Type: ${call.callType}
-Status: ${call.status}
-Duration: ${call.duration} seconds
-Started At: ${call.startedAt.toISOString()}
-${
-  call.endedAt
-    ? `Ended At: ${call.endedAt.toISOString()}`
-    : ""
-}
-${
-  call.notes
-    ? `Notes: ${call.notes}`
-    : ""
-}
-`;
+      success: true,
+
+      message:
+        "Call record created successfully.",
+
+      call,
+
+    };
 
   }
 
@@ -1894,25 +2036,16 @@ ${
     "get_recent_calls"
   ) {
 
-    const parsedLimit =
-      Number(
-        args?.limit
-      );
-
     const limit =
-      Number.isFinite(
-        parsedLimit
-      )
-        ? Math.min(
-            Math.max(
-              Math.floor(
-                parsedLimit
-              ),
-              1
-            ),
-            50
-          )
-        : 10;
+      Math.min(
+        Math.max(
+          Number(
+            args.limit
+          ) || 10,
+          1
+        ),
+        50
+      );
 
 
     const result =
@@ -1921,11 +2054,11 @@ ${
         ownerId,
 
         {
+
           page:
             1,
 
-          limit:
-            limit,
+          limit,
 
           sortBy:
             "createdAt",
@@ -1938,66 +2071,14 @@ ${
       );
 
 
-    if (
-      !result ||
-      !Array.isArray(
-        result.calls
-      ) ||
-      result.calls.length === 0
-    ) {
+    return {
 
-      return `
-No call records found.
-`;
+      success: true,
 
-    }
+      data:
+        result,
 
-
-    const callsText =
-      result.calls
-        .map(
-          (
-            call,
-            index
-          ) => {
-
-            const contactName =
-              call.contact?.fullName ||
-              "Unknown Contact";
-
-            const startedAt =
-              call.startedAt
-                ? new Date(
-                    call.startedAt
-                  ).toLocaleString()
-                : "Not available";
-
-
-            return `
-${index + 1}. ${contactName}
-Type: ${call.callType}
-Status: ${call.status}
-Duration: ${call.duration || 0} seconds
-Started At: ${startedAt}
-${
-  call.notes
-    ? `Notes: ${call.notes}`
-    : ""
-}
-`;
-
-          }
-        )
-        .join(
-          "\n"
-        );
-
-
-    return `
-Here are your recent calls:
-
-${callsText}
-`;
+    };
 
   }
 
@@ -2017,18 +2098,13 @@ ${callsText}
       );
 
 
-    return `
-Here are your call statistics.
+    return {
 
-Total Calls: ${stats.total}
-Incoming Calls: ${stats.incoming}
-Outgoing Calls: ${stats.outgoing}
-Answered Calls: ${stats.answered}
-Missed Calls: ${stats.missed}
-Rejected Calls: ${stats.rejected}
-Today's Calls: ${stats.today}
-Total Duration: ${stats.totalDuration} seconds
-`;
+      success: true,
+
+      stats,
+
+    };
 
   }
 
@@ -2043,32 +2119,30 @@ Total Duration: ${stats.totalDuration} seconds
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
 
-    let call;
+    let call = null;
 
 
     if (
@@ -2114,9 +2188,14 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!call) {
 
-      return `
-I couldn't find a call record for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `No call record found for ${contact.fullName}.`,
+
+      };
 
     }
 
@@ -2125,7 +2204,8 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.callType !== undefined
+      args.callType !==
+      undefined
     ) {
 
       updateData.callType =
@@ -2135,7 +2215,8 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.status !== undefined
+      args.status !==
+      undefined
     ) {
 
       updateData.status =
@@ -2145,7 +2226,8 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.duration !== undefined
+      args.duration !==
+      undefined
     ) {
 
       updateData.duration =
@@ -2155,7 +2237,8 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.notes !== undefined
+      args.notes !==
+      undefined
     ) {
 
       updateData.notes =
@@ -2165,8 +2248,27 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.startedAt !== undefined
+      args.startedAt !==
+      undefined
     ) {
+
+      if (
+        !isValidDate(
+          args.startedAt
+        )
+      ) {
+
+        return {
+
+          success: false,
+
+          message:
+            "Invalid startedAt date.",
+
+        };
+
+      }
+
 
       updateData.startedAt =
         new Date(
@@ -2177,8 +2279,27 @@ I couldn't find a call record for ${contact.fullName}.
 
 
     if (
-      args.endedAt !== undefined
+      args.endedAt !==
+      undefined
     ) {
+
+      if (
+        !isValidDate(
+          args.endedAt
+        )
+      ) {
+
+        return {
+
+          success: false,
+
+          message:
+            "Invalid endedAt date.",
+
+        };
+
+      }
+
 
       updateData.endedAt =
         new Date(
@@ -2194,9 +2315,14 @@ I couldn't find a call record for ${contact.fullName}.
       ).length === 0
     ) {
 
-      return `
-I found the call record, but I couldn't determine what information you want to update.
-`;
+      return {
+
+        success: false,
+
+        message:
+          "No call fields were provided for update.",
+
+      };
 
     }
 
@@ -2213,29 +2339,17 @@ I found the call record, but I couldn't determine what information you want to u
       );
 
 
-    return `
-Call record updated successfully.
+    return {
 
-Contact: ${contact.fullName}
-Type: ${updatedCall.callType}
-Status: ${updatedCall.status}
-Duration: ${updatedCall.duration || 0} seconds
-Started At: ${
-  updatedCall.startedAt
-    ? updatedCall.startedAt.toISOString()
-    : "Not available"
-}
-${
-  updatedCall.endedAt
-    ? `Ended At: ${updatedCall.endedAt.toISOString()}`
-    : ""
-}
-${
-  updatedCall.notes
-    ? `Notes: ${updatedCall.notes}`
-    : ""
-}
-`;
+      success: true,
+
+      message:
+        "Call updated successfully.",
+
+      call:
+        updatedCall,
+
+    };
 
   }
 
@@ -2250,32 +2364,30 @@ ${
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
 
-    let call;
+    let call = null;
 
 
     if (
@@ -2321,25 +2433,16 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!call) {
 
-      return `
-I couldn't find a call record for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `No call record found for ${contact.fullName}.`,
+
+      };
 
     }
-
-
-    const deletedCall = {
-
-      callType:
-        call.callType,
-
-      status:
-        call.status,
-
-      duration:
-        call.duration || 0,
-
-    };
 
 
     await deleteCall(
@@ -2351,14 +2454,30 @@ I couldn't find a call record for ${contact.fullName}.
     );
 
 
-    return `
-Call record deleted successfully.
+    return {
 
-Contact: ${contact.fullName}
-Type: ${deletedCall.callType}
-Status: ${deletedCall.status}
-Duration: ${deletedCall.duration} seconds
-`;
+      success: true,
+
+      message:
+        "Call deleted successfully.",
+
+      deletedCall: {
+
+        contact:
+          contact.fullName,
+
+        callType:
+          call.callType,
+
+        status:
+          call.status,
+
+        duration:
+          call.duration,
+
+      },
+
+    };
 
   }
 
@@ -2373,27 +2492,25 @@ Duration: ${deletedCall.duration} seconds
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
@@ -2409,7 +2526,9 @@ I couldn't find a contact named "${args.contactName}".
 
         title: {
           $regex:
-            args.appointmentTitle,
+            escapeRegex(
+              args.appointmentTitle
+            ),
 
           $options:
             "i",
@@ -2420,9 +2539,32 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!appointment) {
 
-      return `
-I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Appointment "${args.appointmentTitle}" not found for ${contact.fullName}.`,
+
+      };
+
+    }
+
+
+    if (
+      !isValidDate(
+        args.reminderTime
+      )
+    ) {
+
+      return {
+
+        success: false,
+
+        message:
+          "Invalid reminder time.",
+
+      };
 
     }
 
@@ -2450,16 +2592,16 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
       );
 
 
-    return `
-Reminder created successfully.
+    return {
 
-Contact: ${contact.fullName}
-Appointment: ${appointment.title}
-Reminder Type: ${reminder.reminderType}
-Reminder Time: ${new Date(
-  reminder.reminderTime
-).toLocaleString()}
-`;
+      success: true,
+
+      message:
+        "Reminder created successfully.",
+
+      reminder,
+
+    };
 
   }
 
@@ -2475,79 +2617,36 @@ Reminder Time: ${new Date(
 
     const result =
       await getMyReminders(
-        ownerId
+
+        ownerId,
+
+        {
+
+          page:
+            1,
+
+          limit:
+            50,
+
+          sortBy:
+            "reminderTime",
+
+          sortOrder:
+            "asc",
+
+        }
+
       );
 
-      const reminders = 
-          result.reminders
 
+    return {
 
-    if (
-      !reminders ||
-      reminders.length === 0
-    ) {
+      success: true,
 
-      return `
-No reminders found.
-`;
+      data:
+        result,
 
-    }
-
-
-    const remindersText =
-      reminders
-        .map(
-          (
-            reminder,
-            index
-          ) => {
-
-            const contactName =
-              reminder.appointment
-                ?.contact
-                ?.fullName ||
-              "Unknown Contact";
-
-            const appointmentTitle =
-              reminder.appointment
-                ?.title ||
-              "Unknown Appointment";
-
-            const reminderTime =
-              reminder.reminderTime
-                ? new Date(
-                    reminder.reminderTime
-                  ).toLocaleString()
-                : "Not available";
-
-
-            return `
-${index + 1}. ${appointmentTitle}
-Contact: ${contactName}
-Type: ${reminder.reminderType}
-Reminder Time: ${reminderTime}
-Sent: ${reminder.sent ? "Yes" : "No"}
-${
-  reminder.sentAt
-    ? `Sent At: ${new Date(
-        reminder.sentAt
-      ).toLocaleString()}`
-    : ""
-}
-`;
-
-          }
-        )
-        .join(
-          "\n"
-        );
-
-
-    return `
-Here are your reminders:
-
-${remindersText}
-`;
+    };
 
   }
 
@@ -2562,27 +2661,25 @@ ${remindersText}
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
@@ -2598,7 +2695,9 @@ I couldn't find a contact named "${args.contactName}".
 
         title: {
           $regex:
-            args.appointmentTitle,
+            escapeRegex(
+              args.appointmentTitle
+            ),
 
           $options:
             "i",
@@ -2609,14 +2708,19 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!appointment) {
 
-      return `
-I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Appointment "${args.appointmentTitle}" not found.`,
+
+      };
 
     }
 
 
-    let reminder;
+    let reminder = null;
 
 
     if (
@@ -2662,9 +2766,14 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
     if (!reminder) {
 
-      return `
-I couldn't find a reminder for the appointment "${appointment.title}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `No reminder found for "${appointment.title}".`,
+
+      };
 
     }
 
@@ -2673,7 +2782,8 @@ I couldn't find a reminder for the appointment "${appointment.title}".
 
 
     if (
-      args.reminderType !== undefined
+      args.reminderType !==
+      undefined
     ) {
 
       updateData.reminderType =
@@ -2683,25 +2793,39 @@ I couldn't find a reminder for the appointment "${appointment.title}".
 
 
     if (
-      args.reminderTime !== undefined
+      args.reminderTime !==
+      undefined
     ) {
+
+      if (
+        !isValidDate(
+          args.reminderTime
+        )
+      ) {
+
+        return {
+
+          success: false,
+
+          message:
+            "Invalid reminder time.",
+
+        };
+
+      }
+
 
       updateData.reminderTime =
         new Date(
           args.reminderTime
         );
 
-      updateData.sent =
-        false;
-
-      updateData.sentAt =
-        null;
-
     }
 
 
     if (
-      args.sent !== undefined
+      args.sent !==
+      undefined
     ) {
 
       updateData.sent =
@@ -2716,9 +2840,14 @@ I couldn't find a reminder for the appointment "${appointment.title}".
       ).length === 0
     ) {
 
-      return `
-I found the reminder, but I couldn't determine what information you want to update.
-`;
+      return {
+
+        success: false,
+
+        message:
+          "No reminder fields were provided for update.",
+
+      };
 
     }
 
@@ -2735,21 +2864,17 @@ I found the reminder, but I couldn't determine what information you want to upda
       );
 
 
-    return `
-Reminder updated successfully.
+    return {
 
-Contact: ${contact.fullName}
-Appointment: ${appointment.title}
-Type: ${updatedReminder.reminderType}
-Reminder Time: ${new Date(
-  updatedReminder.reminderTime
-).toLocaleString()}
-Sent: ${
-  updatedReminder.sent
-    ? "Yes"
-    : "No"
-}
-`;
+      success: true,
+
+      message:
+        "Reminder updated successfully.",
+
+      reminder:
+        updatedReminder,
+
+    };
 
   }
 
@@ -2764,27 +2889,25 @@ Sent: ${
   ) {
 
     const contact =
-      await Contact.findOne({
+      await getContactByName(
 
-        owner:
-          ownerId,
+        ownerId,
 
-        fullName: {
-          $regex:
-            args.contactName,
+        args.contactName
 
-          $options:
-            "i",
-        },
-
-      });
+      );
 
 
     if (!contact) {
 
-      return `
-I couldn't find a contact named "${args.contactName}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Contact "${args.contactName}" not found.`,
+
+      };
 
     }
 
@@ -2800,7 +2923,9 @@ I couldn't find a contact named "${args.contactName}".
 
         title: {
           $regex:
-            args.appointmentTitle,
+            escapeRegex(
+              args.appointmentTitle
+            ),
 
           $options:
             "i",
@@ -2811,14 +2936,19 @@ I couldn't find a contact named "${args.contactName}".
 
     if (!appointment) {
 
-      return `
-I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.fullName}.
-`;
+      return {
+
+        success: false,
+
+        message:
+          `Appointment "${args.appointmentTitle}" not found.`,
+
+      };
 
     }
 
 
-    let reminder;
+    let reminder = null;
 
 
     if (
@@ -2864,22 +2994,16 @@ I couldn't find an appointment titled "${args.appointmentTitle}" for ${contact.f
 
     if (!reminder) {
 
-      return `
-I couldn't find a reminder for the appointment "${appointment.title}".
-`;
+      return {
+
+        success: false,
+
+        message:
+          `No reminder found for "${appointment.title}".`,
+
+      };
 
     }
-
-
-    const deletedReminder = {
-
-      reminderType:
-        reminder.reminderType,
-
-      reminderTime:
-        reminder.reminderTime,
-
-    };
 
 
     await deleteReminder(
@@ -2891,27 +3015,407 @@ I couldn't find a reminder for the appointment "${appointment.title}".
     );
 
 
-    return `
-Reminder deleted successfully.
+    return {
 
-Contact: ${contact.fullName}
-Appointment: ${appointment.title}
-Type: ${deletedReminder.reminderType}
-Reminder Time: ${new Date(
-  deletedReminder.reminderTime
-).toLocaleString()}
-`;
+      success: true,
+
+      message:
+        "Reminder deleted successfully.",
+
+      deletedReminder: {
+
+        contact:
+          contact.fullName,
+
+        appointment:
+          appointment.title,
+
+        reminderType:
+          reminder.reminderType,
+
+        reminderTime:
+          reminder.reminderTime,
+
+      },
+
+    };
 
   }
 
 
   // ========================================
-  // FALLBACK
+  // DASHBOARD STATS
+  // ========================================
+
+  if (
+    toolName ===
+    "get_dashboard_stats"
+  ) {
+
+    const stats =
+      await getDashboardStats(
+        ownerId
+      );
+
+
+    return {
+
+      success: true,
+
+      stats,
+
+    };
+
+  }
+
+
+  // ========================================
+  // UNKNOWN TOOL
+  // ========================================
+
+  return {
+
+    success: false,
+
+    message:
+      `Unknown tool: ${toolName}`,
+
+  };
+
+};
+
+
+// ========================================
+// AI CHAT SERVICE
+// ========================================
+
+export const chatWithAI = async (
+  message,
+  ownerId
+) => {
+
+  // ========================================
+  // FETCH USER DATA
+  // ========================================
+
+  const userData =
+    await getUserContext(
+      ownerId
+    );
+
+
+  const userContext =
+    buildUserContext(
+      userData
+    );
+
+
+  // ========================================
+  // SYSTEM PROMPT
+  // ========================================
+
+  const systemPrompt = `
+${AI_SECRETARY_SYSTEM_PROMPT}
+
+CURRENT DATE:
+${new Date().toISOString()}
+
+AUTHENTICATED USER ID:
+${ownerId}
+
+IMPORTANT TOOL RULES:
+
+1. Never access or modify another user's data.
+
+2. Every database operation must be restricted to the authenticated user.
+
+3. Never invent contacts, appointments, calls, reminders, or dashboard statistics.
+
+4. If the user asks for information that exists in the provided context, answer using that information.
+
+5. If the user explicitly requests a database action, use the appropriate tool.
+
+6. Never create, update, or delete data unless the user explicitly requests it.
+
+7. Before creating an appointment, verify that the contact exists.
+
+8. Before creating a reminder, verify that the appointment exists.
+
+9. Appointment dates must use YYYY-MM-DD.
+
+10. Appointment times must use HH:mm 24-hour format.
+
+11. Call type must be incoming or outgoing.
+
+12. Call status must be answered, missed, or rejected.
+
+13. Reminder type must be email or whatsapp.
+
+14. For ambiguous contact names, do not guess. Ask the user for clarification.
+
+15. For update/delete operations, if multiple matching records exist and the exact record cannot be safely identified, ask the user for clarification.
+
+16. Never claim that an action succeeded unless the corresponding tool execution succeeded.
+
+17. When a tool returns an error, explain the error honestly.
+
+18. For date-related requests, use the current date above as the reference date.
+
+19. If the user asks for dashboard or overall application statistics, use get_dashboard_stats.
+
+20. If the user asks about upcoming appointments, use get_upcoming_appointments.
+
+21. If the user asks for appointment statistics, use get_appointment_stats.
+
+22. If the user asks to list or search contacts, use get_contacts.
+
+23. If the user asks about recent calls or call history, use get_recent_calls.
+
+24. If the user asks about call analytics or statistics, use get_call_stats.
+
+25. If the user asks about reminders, use get_reminders.
+
+26. Never expose internal tool names, database IDs, owner IDs, or implementation details unless explicitly requested.
+`;
+
+
+  // ========================================
+  // INITIAL MESSAGES
+  // ========================================
+
+  let messages = [
+
+    {
+      role:
+        "system",
+
+      content:
+        systemPrompt,
+    },
+
+
+    {
+      role:
+        "system",
+
+      content: `
+Here is the authenticated user's current application data.
+
+${userContext}
+`,
+    },
+
+
+    {
+      role:
+        "user",
+
+      content:
+        message,
+    },
+
+  ];
+
+
+  // ========================================
+  // TOOL LOOP
+  // ========================================
+
+  for (
+    let iteration = 0;
+    iteration < 5;
+    iteration++
+  ) {
+
+    const completion =
+      await groq.chat.completions.create({
+
+        model:
+          MODEL,
+
+        messages,
+
+        temperature:
+          0.3,
+
+        max_tokens:
+          1000,
+
+        tools,
+
+        tool_choice:
+          "auto",
+
+      });
+
+
+    const assistantMessage =
+      completion.choices?.[0]?.message;
+
+
+    if (!assistantMessage) {
+
+      return (
+        "I couldn't process your request."
+      );
+
+    }
+
+
+    // ========================================
+    // NORMAL RESPONSE
+    // ========================================
+
+    if (
+      !assistantMessage.tool_calls ||
+      assistantMessage.tool_calls.length === 0
+    ) {
+
+      return (
+        assistantMessage.content ||
+        "I couldn't process your request."
+      );
+
+    }
+
+
+    // ========================================
+    // ADD ASSISTANT TOOL CALL MESSAGE
+    // ========================================
+
+    messages.push(
+      assistantMessage
+    );
+
+
+    // ========================================
+    // EXECUTE ALL TOOL CALLS
+    // ========================================
+
+    for (
+      const toolCall
+      of assistantMessage.tool_calls
+    ) {
+
+      const toolName =
+        toolCall.function.name;
+
+
+      let args = {};
+
+
+      try {
+
+        args =
+          JSON.parse(
+            toolCall.function.arguments ||
+            "{}"
+          );
+
+      } catch (
+        error
+      ) {
+
+        messages.push({
+
+          role:
+            "tool",
+
+          tool_call_id:
+            toolCall.id,
+
+          content:
+            JSON.stringify({
+
+              success:
+                false,
+
+              message:
+                "Invalid tool arguments.",
+
+            }),
+
+        });
+
+        continue;
+
+      }
+
+
+      try {
+
+        const result =
+          await executeTool(
+
+            toolName,
+
+            args,
+
+            ownerId
+
+          );
+
+
+        messages.push({
+
+          role:
+            "tool",
+
+          tool_call_id:
+            toolCall.id,
+
+          content:
+            JSON.stringify(
+              result
+            ),
+
+        });
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          `AI tool error [${toolName}]:`,
+          error
+        );
+
+
+        messages.push({
+
+          role:
+            "tool",
+
+          tool_call_id:
+            toolCall.id,
+
+          content:
+            JSON.stringify({
+
+              success:
+                false,
+
+              message:
+                error.message ||
+                "An unexpected error occurred while executing the requested action.",
+
+            }),
+
+        });
+
+      }
+
+    }
+
+  }
+
+
+  // ========================================
+  // LOOP FALLBACK
   // ========================================
 
   return (
-    assistantMessage.content ||
-    "I couldn't process your request."
-  )
+    "I couldn't complete the requested operation. Please try again."
+  );
 
-}
+};

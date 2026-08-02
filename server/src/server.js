@@ -5,23 +5,26 @@ import connectDB from "./config/database.js";
 import startAppointmentCron from "./jobs/appointment.job.js";
 import { startReminderCron } from "./cron/reminder.cron.js";
 
-
 const startServer = async () => {
   try {
     await connectDB();
 
-    startReminderCron()
-
-    app.listen(config.port, () => {
-      console.log(`Server is running on port ${config.port}`);
+    const server = app.listen(config.port, () => {
+      console.log(
+        `Server is running on port ${config.port}`
+      );
     });
 
-      // start Cron jobs
-      startAppointmentCron()
+    // Start Cron Jobs
+    startAppointmentCron();
+    startReminderCron();
 
   } catch (error) {
-    console.error("Failed to start server");
-    console.error(error);
+    console.error(
+      "Failed to start server:",
+      error
+    );
+
     process.exit(1);
   }
 };

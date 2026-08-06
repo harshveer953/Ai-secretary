@@ -42,6 +42,7 @@ import {
 import {
   AI_SECRETARY_SYSTEM_PROMPT,
 } from "./ai.prompts.js";
+import { model } from "mongoose";
 
 
 const groq = new Groq({
@@ -1238,8 +1239,10 @@ const executeTool = async (
   ) {
 
     const search =
-      args.search ||
-      "";
+      args =
+    JSON.parse(
+    toolCall.function.arguments || "{}"
+  ) || {};
 
     const limit =
       Math.min(
@@ -3249,173 +3252,199 @@ ${userContext}
       });
 
 
-    const assistantMessage =
-      completion.choices?.[0]?.message;
+ const assistantMessage =
+  completion.choices?.[0]?.message;
+
+if (!assistantMessage) {
+
+  return (
+    "I couldn't process your request."
+  );
+
+}
 
 
-    if (!assistantMessage) {
+// ========================================
+// NORMAL RESPONSE
+// ========================================
 
-      return (
-        "I couldn't process your request."
+if (
+  !assistantMessage.tool_calls ||
+  assistantMessage.tool_calls.length === 0
+) {
+
+  return (
+    assistantMessage.content ||
+    "I couldn't process your request."
+  );
+
+}
+
+
+// ========================================
+// ADD ASSISTANT TOOL CALL MESSAGE
+// ========================================
+
+messages.push(
+  assistantMessage
+);
+
+
+// ========================================
+// EXECUTE ALL TOOL CALLS
+// ========================================
+
+for (
+  const toolCall
+  of assistantMessage.tool_calls
+) {
+
+  const toolName =
+    toolCall.function.name;
+
+  let args = {};
+
+  try {
+
+    args =
+      JSON.parse(
+        toolCall.function.arguments ||
+        "{}"
       );
 
-    }
+  } catch (
+    error
+  ) {
 
+    messages.push({
 
-    // ========================================
-    // NORMAL RESPONSE
-    // ========================================
+      role:
+        "tool",
 
-    if (
-      !assistantMessage.tool_calls ||
-      assistantMessage.tool_calls.length === 0
-    ) {
+      tool_call_id:
+        toolCall.id,
 
-      return (
-        assistantMessage.content ||
-        "I couldn't process your request."
-      );
+      content:
+        JSON.stringify({
 
-    }
+          success:
+            false,
 
+          message:
+            "Invalid tool arguments.",
 
-    // ========================================
-    // ADD ASSISTANT TOOL CALL MESSAGE
-    // ========================================
+        }),
 
-    messages.push(
-      assistantMessage
-    );
+    });
 
-
-    // ========================================
-    // EXECUTE ALL TOOL CALLS
-    // ========================================
-
-    for (
-      const toolCall
-      of assistantMessage.tool_calls
-    ) {
-
-      const toolName =
-        toolCall.function.name;
-
-
-      let args = {};
-
-
-      try {
-
-        args =
-          JSON.parse(
-            toolCall.function.arguments ||
-            "{}"
-          );
-
-      } catch (
-        error
-      ) {
-
-        messages.push({
-
-          role:
-            "tool",
-
-          tool_call_id:
-            toolCall.id,
-
-          content:
-            JSON.stringify({
-
-              success:
-                false,
-
-              message:
-                "Invalid tool arguments.",
-
-            }),
-
-        });
-
-        continue;
-
-      }
-
-
-      try {
-
-        const result =
-          await executeTool(
-
-            toolName,
-
-            args,
-
-            ownerId
-
-          );
-
-
-        messages.push({
-
-          role:
-            "tool",
-
-          tool_call_id:
-            toolCall.id,
-
-          content:
-            JSON.stringify(
-              result
-            ),
-
-        });
-
-      } catch (
-        error
-      ) {
-
-        console.error(
-          `AI tool error [${toolName}]:`,
-          error
-        );
-
-
-        messages.push({
-
-          role:
-            "tool",
-
-          tool_call_id:
-            toolCall.id,
-
-          content:
-            JSON.stringify({
-
-              success:
-                false,
-
-              message:
-                error.message ||
-                "An unexpected error occurred while executing the requested action.",
-
-            }),
-
-        });
-
-      }
-
-    }
+    continue;
 
   }
 
 
-  // ========================================
-  // LOOP FALLBACK
-  // ========================================
+  try {
 
-  return (
-    "I couldn't complete the requested operation. Please try again."
-  );
+    const result =
+      await executeTool(
+
+        toolName,
+
+        args,
+
+        ownerId
+
+      );
+
+
+    messages.push({
+
+      role:
+        "tool",
+
+      tool_call_id:
+        toolCall.id,
+
+      content:
+        JSON.stringify(
+          result
+        ),
+
+    });
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      `AI tool error [${toolName}]:`,
+      error
+    );
+
+
+    messages.push({
+
+      role:
+        "tool",
+
+      tool_call_id:
+        toolCall.id,
+
+      content:
+        JSON.stringify({
+
+          success:
+            false,
+
+          message:
+            error.message ||
+            "An unexpected error occurred while executing the requested action.",
+
+        }),
+
+    });
+
+  }
+
+}
+
+
+// ========================================
+// ASK AI AGAIN AFTER TOOL EXECUTION
+// ========================================
+
+const finalCompletion =
+  await groq.chat.completions.create({
+
+    model: MODEL,
+
+    messages,
+
+    temperature: 0.3,
+
+    max_tokens: 1000,
+
+    tools,
+
+    tool_choice: "auto",
+
+  });
+
+
+const finalAssistantMessage =
+  finalCompletion.choices?.[0]?.message;
+
+
+// ========================================
+// FINAL RESPONSE
+// ========================================
+
+return (
+  finalAssistantMessage?.content ||
+  "Task completed successfully."
+);
+
+} // <-- for loop end
+
+return "I couldn't process your request.";
 
 };

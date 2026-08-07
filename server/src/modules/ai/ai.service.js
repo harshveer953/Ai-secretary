@@ -1229,56 +1229,55 @@ const executeTool = async (
   }
 
 
-  // ========================================
-  // GET CONTACTS
-  // ========================================
+// ========================================
+// GET CONTACTS
+// ========================================
 
-  if (
-    toolName ===
-    "get_contacts"
-  ) {
+if (
+  toolName ===
+  "get_contacts"
+) {
 
-    const search =
-      args =
-    JSON.parse(
-    toolCall.function.arguments || "{}"
-  ) || {};
+  const search =
+    args?.search ||
+    "";
 
-    const limit =
-      Math.min(
-        Math.max(
-          Number(
-            args.limit
-          ) || 20,
-          1
-        ),
-        50
-      );
+  const limit =
+    Math.min(
+      Math.max(
+        Number(
+          args?.limit
+        ) || 20,
+        1
+      ),
+      50
+    );
 
 
-    const result =
-      await getMyContacts(
+  const result =
+    await getMyContacts(
 
-        ownerId,
+      ownerId,
 
-        search,
+      search,
 
-        1,
+      1,
 
-        limit
+      limit
 
-      );
+    );
 
 
-    return {
+  return {
 
-      success: true,
+    success: true,
 
-      data: result,
+    data:
+      result,
 
-    };
+  };
 
-  }
+}
 
 
   // ========================================

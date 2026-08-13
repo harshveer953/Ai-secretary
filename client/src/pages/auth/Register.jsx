@@ -1,312 +1,211 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { registerUser } from "../../services/authApi";
+import { useDispatch } from "react-redux";
+import { useForm } from "react-hook-form";
+import { Command, User, Mail, Lock, Phone, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { registerUser, loginUser } from "../../services/authApi";
+import { loginStart, loginSuccess, loginFailure } from "../../features/auth/authSlice";
 
 const Register = () => {
+  const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [serverError, setServerError] = useState("");
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      fullName: "",
+      email: "",
+      password: "",
+      phone: "",
+    },
   });
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    if (error) {
-      setError("");
-    }
-  };
-
-  const validateForm = () => {
-    const fullName = formData.fullName.trim();
-    const email = formData.email.trim();
-    const password = formData.password;
-
-    if (!fullName) {
-      return "Full name is required.";
-    }
-
-    if (fullName.length < 3) {
-      return "Full name must be at least 3 characters.";
-    }
-
-    if (!email) {
-      return "Email is required.";
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return "Please provide a valid email address.";
-    }
-
-    if (!password) {
-      return "Password is required.";
-    }
-
-    if (password.length < 8) {
-      return "Password must be at least 8 characters.";
-    }
-
-    if (password !== formData.confirmPassword) {
-      return "Passwords do not match.";
-    }
-
-    return null;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    setError("");
-    setSuccess("");
-
-    const validationError = validateForm();
-
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
+  const onSubmit = async (data) => {
+    setServerError("");
+    dispatch(loginStart());
     try {
-      setLoading(true);
-
-      const payload = {
-        fullName: formData.fullName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-      };
-
-      // Phone is optional in backend
-      if (formData.phone.trim()) {
-        payload.phone = formData.phone.trim();
+      // 1. Register User
+      const regResponse = await registerUser(data);
+      if (!regResponse?.success) {
+        throw new Error(regResponse?.message || "Registration failed.");
       }
 
-      await registerUser(payload);
-
-      setSuccess("Account created successfully. Redirecting to login...");
-
-      setFormData({
-        fullName: "",
-        email: "",
-        phone: "",
-        password: "",
-        confirmPassword: "",
+      // 2. Automatic Login Flow (as mandated by backend architecture rule #8 in BRAIN.md)
+      const loginResponse = await loginUser({
+        email: data.email,
+        password: data.password,
       });
 
-      setTimeout(() => {
+      if (loginResponse?.success && loginResponse?.data?.user) {
+        if (loginResponse.data.accessToken) {
+          localStorage.setItem("accessToken", loginResponse.data.accessToken);
+        }
+        dispatch(loginSuccess(loginResponse.data.user));
+        navigate("/dashboard");
+      } else {
+        // Fallback if auto-login returns to login screen
         navigate("/login");
-      }, 1200);
+      }
     } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        "Unable to create your account. Please try again.";
-
-      setError(message);
-    } finally {
-      setLoading(false);
+      const msg =
+        err.response?.data?.message || err.message || "Registration failed. Please check inputs.";
+      setServerError(msg);
+      dispatch(loginFailure(msg));
     }
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 py-10">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-semibold tracking-tight">
-            AI Secretary
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#f5f5f7] dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors duration-200">
+      <div className="w-full max-w-md space-y-6">
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center mx-auto shadow-md">
+            <Command className="w-6 h-6" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Create AI Secretary Account
           </h1>
-
-          <p className="mt-3 text-zinc-400">
-            Create your account to get started
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Get started with your intelligent personal secretary
           </p>
         </div>
 
-        {/* Card */}
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-8 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Error */}
-            {error && (
-              <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-                {error}
-              </div>
-            )}
+        {/* Register Form Card */}
+        <div className="apple-card p-6 sm:p-8 rounded-3xl space-y-6">
+          {serverError && (
+            <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 text-xs font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{serverError}</span>
+            </div>
+          )}
 
-            {/* Success */}
-            {success && (
-              <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">
-                {success}
-              </div>
-            )}
-
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Full Name */}
-            <div>
-              <label
-                htmlFor="fullName"
-                className="mb-2 block text-sm font-medium text-zinc-200"
-              >
-                Full name
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Full Name
               </label>
-
-              <input
-                id="fullName"
-                name="fullName"
-                type="text"
-                value={formData.fullName}
-                onChange={handleChange}
-                placeholder="Priyanshu Singh"
-                autoComplete="name"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-white outline-none transition placeholder:text-zinc-600 focus:border-zinc-500"
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-medium text-zinc-200"
-              >
-                Email
-              </label>
-
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="you@example.com"
-                autoComplete="email"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-white outline-none transition placeholder:text-zinc-600 focus:border-zinc-500"
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label
-                htmlFor="phone"
-                className="mb-2 block text-sm font-medium text-zinc-200"
-              >
-                Phone
-                <span className="ml-2 text-xs text-zinc-500">
-                  Optional
-                </span>
-              </label>
-
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="9876543210"
-                autoComplete="tel"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-white outline-none transition placeholder:text-zinc-600 focus:border-zinc-500"
-              />
-            </div>
-
-            {/* Passwords */}
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* Password */}
-              <div>
-                <label
-                  htmlFor="password"
-                  className="mb-2 block text-sm font-medium text-zinc-200"
-                >
-                  Password
-                </label>
-
-                <div className="relative">
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="Minimum 8 characters"
-                    autoComplete="new-password"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 pr-16 text-white outline-none transition placeholder:text-zinc-600 focus:border-zinc-500"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-zinc-400 transition hover:text-white"
-                  >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </div>
+              <div className="relative">
+                <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Steve Jobs"
+                  {...register("fullName", {
+                    required: "Full name is required",
+                    minLength: {
+                      value: 3,
+                      message: "Full name must be at least 3 characters",
+                    },
+                  })}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                />
               </div>
+              {errors.fullName && (
+                <p className="text-xs text-rose-500 font-medium">{errors.fullName.message}</p>
+              )}
+            </div>
 
-              {/* Confirm Password */}
-              <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="mb-2 block text-sm font-medium text-zinc-200"
-                >
-                  Confirm password
-                </label>
+            {/* Email Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Email address
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="email"
+                  placeholder="steve@apple.com"
+                  {...register("email", {
+                    required: "Email address is required",
+                    pattern: {
+                      value: /^\S+@\S+$/i,
+                      message: "Please enter a valid email address",
+                    },
+                  })}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                />
+              </div>
+              {errors.email && (
+                <p className="text-xs text-rose-500 font-medium">{errors.email.message}</p>
+              )}
+            </div>
 
-                <div className="relative">
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    placeholder="Re-enter password"
-                    autoComplete="new-password"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 pr-16 text-white outline-none transition placeholder:text-zinc-600 focus:border-zinc-500"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowConfirmPassword((prev) => !prev)
-                    }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-zinc-400 transition hover:text-white"
-                  >
-                    {showConfirmPassword ? "Hide" : "Show"}
-                  </button>
-                </div>
+            {/* Phone Field (Optional) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Phone Number (Optional)
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="+1 (555) 000-0000"
+                  {...register("phone")}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                />
               </div>
             </div>
 
-            {/* Submit */}
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  {...register("password", {
+                    required: "Password is required",
+                    minLength: {
+                      value: 8,
+                      message: "Password must be at least 8 characters",
+                    },
+                  })}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all"
+                />
+              </div>
+              {errors.password && (
+                <p className="text-xs text-rose-500 font-medium">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-white px-5 py-3.5 font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isSubmitting}
+              className="w-full mt-2 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
             >
-              {loading ? "Creating account..." : "Create account"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Creating Account...</span>
+                </>
+              ) : (
+                <>
+                  <span>Create Account</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
-
-          {/* Login */}
-          <div className="mt-7 text-center text-sm text-zinc-500">
-            Already have an account?{" "}
-            <Link
-              to="/login"
-              className="font-medium text-white transition hover:text-zinc-300"
-            >
-              Sign in
-            </Link>
-          </div>
         </div>
+
+        {/* Footer link */}
+        <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+          Already have an account?{" "}
+          <Link
+            to="/login"
+            className="font-semibold text-zinc-900 dark:text-white hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

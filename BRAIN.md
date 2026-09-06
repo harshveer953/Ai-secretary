@@ -1683,3 +1683,35 @@ Never duplicate backend business logic.
 **Inspect first. Build second. Test third.**
 
 The goal is a frontend that works against the real AI Secretary backend, with every API request hitting the correct endpoint, every payload matching backend validation, every response being parsed correctly, and every authentication flow behaving like the real production application.
+
+---
+
+# 51. RECENT SYSTEM & DEPLOYMENT UPDATES
+
+### 51.1 Production API & Deployment Configuration
+* **Production Backend URL**: `https://ai-secretary-1-y118.onrender.com`
+* **Production Frontend URL**: `https://ai-secretary-wheat.vercel.app`
+* **Root Directory**: `server` (all lowercase, matching Linux case-sensitive filesystems).
+* **Vite API Setup**: `client/src/services/api.js` uses `import.meta.env.VITE_API_URL` if present, defaulting to `https://ai-secretary-1-y118.onrender.com/api/v1`.
+* **Vite Proxy Config**: `client/vite.config.js` dynamically proxies `/api` requests to `VITE_API_URL` or `http://localhost:8080`.
+* **Vercel Rewrites**: `client/vercel.json` rewrites `/api/v1/*` to `https://ai-secretary-1-y118.onrender.com/api/v1/*` and all client routes `/(.*)` to `/index.html`.
+
+### 51.2 CORS & Cross-Site Authentication
+* **CORS Settings**: `server/src/app.js` is configured with `cors({ origin: process.env.CLIENT_URL || true, credentials: true })`.
+* **Cross-Site Cookies**: `server/src/constants/cookieOptions.js` uses `sameSite: "none"` and `secure: true` in production for cross-site cookie transmission between Vercel and Render.
+* **Token JSON Delivery**: `auth.controller.js` includes `accessToken` and `refreshToken` inside the JSON response payload (`new ApiResponse(200, "...", { user, accessToken, refreshToken })`).
+
+### 51.3 Token Storage & Session Recovery
+* **Token Extraction**: `Login.jsx` and `Register.jsx` extract `accessToken` from `response.data.data.accessToken` (or `response.data.accessToken`) and persist it in `localStorage`.
+* **401 Auto-Redirect Interceptor**: `client/src/services/api.js` automatically clears `localStorage` and redirects to `/login` when receiving a `401 Unauthorized` response.
+* **Protected Route Validation**: `ProtectedRoute.jsx` verifies `localStorage.getItem("accessToken")` on mount, logging out stale sessions to prevent infinite `401` auth loops.
+
+### 51.4 Groq AI Resilient Multi-Model Architecture & Tool Invocation
+* **Multi-Model Fallback**: `server/src/modules/ai/ai.service.js` uses `CANDIDATE_MODELS` array (`["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "qwen/qwen3.8-27b"]`) with automatic fallback to prevent server crashes on deprecated or rate-limited models.
+* **Flexible Tool Schemas**: `create_contact` tool schema requires only `["fullName"]`, setting fallback default values for `phone` ("Not provided") and `email` ("") so contact creation works even if optional contact details are missing.
+* **Safe Duplicate Search**: `executeTool` builds conditional `$or` queries for contacts only when non-empty `phone` or `email` strings are supplied, preventing false-positive duplicate matches.
+* **Immediate Tool Invocation Rules**: System prompt rules (27–30) instruct the AI model to execute `create_contact`, `create_appointment`, `create_call`, and `create_reminder` immediately upon user request without prompting for optional fields.
+* **Post-Tool Execution Fix**: Fixed post-tool completion execution to safely use the active candidate model without encountering `ReferenceError: MODEL is not defined`.
+
+### 51.5 UI Updates
+* **AI Assistant Branding**: Updated `client/src/pages/AiAssistant.jsx` header title to "Artificial Intelligence Secretary".

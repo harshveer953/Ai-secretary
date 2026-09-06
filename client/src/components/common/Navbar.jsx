@@ -11,7 +11,6 @@ import {
   Calendar,
   Bell,
   PhoneCall,
-  User,
   LogOut,
 } from "lucide-react";
 import { logout } from "../../features/auth/authSlice";
@@ -43,7 +42,6 @@ const Navbar = () => {
     if (path.includes("reminders")) return "Reminders & Alerts";
     if (path.includes("calls")) return "Call Logs";
     if (path.includes("ai")) return "Apple Intelligence Assistant";
-    if (path.includes("profile")) return "Account Settings";
     return "AI Secretary";
   };
 
@@ -54,7 +52,6 @@ const Navbar = () => {
     { name: "Reminders", path: "/reminders", icon: Bell },
     { name: "Calls", path: "/calls", icon: PhoneCall },
     { name: "AI Assistant", path: "/ai", icon: Sparkles },
-    { name: "Profile", path: "/profile", icon: User },
   ];
 
   return (

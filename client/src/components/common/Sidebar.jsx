@@ -7,7 +7,6 @@ import {
   Bell,
   PhoneCall,
   Sparkles,
-  User,
   LogOut,
   Command,
 } from "lucide-react";
@@ -37,7 +36,6 @@ const Sidebar = () => {
     { name: "Reminders", path: "/reminders", icon: Bell },
     { name: "Calls", path: "/calls", icon: PhoneCall },
     { name: "AI Assistant", path: "/ai", icon: Sparkles, badge: "Intelligence" },
-    { name: "Profile", path: "/profile", icon: User },
   ];
 
   return (

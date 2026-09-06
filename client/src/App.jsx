@@ -18,7 +18,6 @@ import Appointments from "./pages/Appointments";
 import Reminders from "./pages/Reminders";
 import Calls from "./pages/Calls";
 import AiAssistant from "./pages/AiAssistant";
-import Profile from "./pages/Profile";
 
 const App = () => {
   return (
@@ -39,7 +38,6 @@ const App = () => {
           <Route path="/reminders" element={<Reminders />} />
           <Route path="/calls" element={<Calls />} />
           <Route path="/ai" element={<AiAssistant />} />
-          <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>
 

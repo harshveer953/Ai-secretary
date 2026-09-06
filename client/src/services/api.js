@@ -1,7 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "/api/v1",
+  baseURL: import.meta.env.VITE_API_URL 
+    ? `${import.meta.env.VITE_API_URL.replace(/\/$/, "")}/api/v1`
+    : "https://ai-secretary-1-y118.onrender.com/api/v1",
   headers: {
     "Content-Type": "application/json",
   },

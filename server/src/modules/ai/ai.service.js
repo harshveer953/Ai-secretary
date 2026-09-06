@@ -222,8 +222,6 @@ const tools = [
 
         required: [
           "fullName",
-          "phone",
-          "email",
         ],
 
         additionalProperties: false,
@@ -1143,94 +1141,50 @@ const executeTool = async (
   // CREATE CONTACT
   // ========================================
 
-  if (
-    toolName ===
-    "create_contact"
-  ) {
-
-    const existingContact =
-      await Contact.findOne({
-
-        owner: ownerId,
-
-        $or: [
-
-          {
-            email:
-              args.email,
-          },
-
-          {
-            phone:
-              args.phone,
-          },
-
-        ],
-
-      });
-
-
-    if (existingContact) {
-
-      return {
-        success: false,
-
-        message:
-          "A contact already exists with this email or phone number.",
-
-        contact: {
-          fullName:
-            existingContact.fullName,
-
-          email:
-            existingContact.email,
-
-          phone:
-            existingContact.phone,
-        },
-      };
-
+  if (toolName === "create_contact") {
+    const queryConditions = [];
+    if (args.email && typeof args.email === "string" && args.email.trim() !== "") {
+      queryConditions.push({ email: args.email.trim() });
+    }
+    if (args.phone && typeof args.phone === "string" && args.phone.trim() !== "") {
+      queryConditions.push({ phone: args.phone.trim() });
     }
 
+    if (queryConditions.length > 0) {
+      const existingContact = await Contact.findOne({
+        owner: ownerId,
+        $or: queryConditions,
+      });
 
-    const contact =
-      await createContact(
+      if (existingContact) {
+        return {
+          success: false,
+          message: `A contact named "${existingContact.fullName}" already exists with this email or phone number.`,
+          contact: {
+            fullName: existingContact.fullName,
+            email: existingContact.email,
+            phone: existingContact.phone,
+          },
+        };
+      }
+    }
 
-        {
-          fullName:
-            args.fullName,
-
-          phone:
-            args.phone,
-
-          email:
-            args.email,
-
-          company:
-            args.company ||
-            "",
-
-          designation:
-            args.designation ||
-            "",
-        },
-
-        ownerId
-
-      );
-
+    const contact = await createContact(
+      {
+        fullName: args.fullName,
+        phone: args.phone && typeof args.phone === "string" && args.phone.trim() !== "" ? args.phone : "Not provided",
+        email: args.email || "",
+        company: args.company || "",
+        designation: args.designation || "",
+      },
+      ownerId
+    );
 
     return {
-
       success: true,
-
-      message:
-        "Contact created successfully.",
-
+      message: `Contact "${contact.fullName}" created successfully.`,
       contact,
-
     };
-
   }
 
 

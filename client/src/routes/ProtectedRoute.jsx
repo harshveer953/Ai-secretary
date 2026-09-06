@@ -12,24 +12,31 @@ const ProtectedRoute = () => {
 
   useEffect(() => {
     let isMounted = true;
+    const token = localStorage.getItem("accessToken");
+
     const verifyAuth = async () => {
-      if (!user && !isAuthenticated) {
-        try {
-          const response = await getCurrentUser();
-          if (isMounted && response?.data) {
-            dispatch(setUser(response.data));
-          }
-        } catch {
-          if (isMounted) {
-            dispatch(logout());
-          }
-        } finally {
-          if (isMounted) {
-            setCheckingAuth(false);
-          }
+      if (!token) {
+        if (isMounted) {
+          dispatch(logout());
+          setCheckingAuth(false);
         }
-      } else {
-        setCheckingAuth(false);
+        return;
+      }
+
+      try {
+        const response = await getCurrentUser();
+        const userData = response?.data?.data || response?.data;
+        if (isMounted && userData) {
+          dispatch(setUser(userData));
+        }
+      } catch {
+        if (isMounted) {
+          dispatch(logout());
+        }
+      } finally {
+        if (isMounted) {
+          setCheckingAuth(false);
+        }
       }
     };
 
@@ -37,7 +44,7 @@ const ProtectedRoute = () => {
     return () => {
       isMounted = false;
     };
-  }, [dispatch, isAuthenticated, user]);
+  }, [dispatch]);
 
   if (checkingAuth) {
     return (

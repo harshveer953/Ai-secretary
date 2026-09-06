@@ -3420,27 +3420,26 @@ for (
 // ASK AI AGAIN AFTER TOOL EXECUTION
 // ========================================
 
-const finalCompletion =
-  await groq.chat.completions.create({
-
-    model: MODEL,
-
-    messages,
-
-    temperature: 0.3,
-
-    max_tokens: 1000,
-
-    tools,
-
-    tool_choice: "auto",
-
-  });
-
+let finalCompletion = null;
+for (let m = currentModelIndex; m < CANDIDATE_MODELS.length; m++) {
+  try {
+    finalCompletion = await groq.chat.completions.create({
+      model: CANDIDATE_MODELS[m],
+      messages,
+      temperature: 0.3,
+      max_tokens: 600,
+      tools,
+      tool_choice: "auto",
+    });
+    currentModelIndex = m;
+    break;
+  } catch (err) {
+    console.error(`Groq final completion error [${CANDIDATE_MODELS[m]}]:`, err.message);
+  }
+}
 
 const finalAssistantMessage =
-  finalCompletion.choices?.[0]?.message;
-
+  finalCompletion?.choices?.[0]?.message;
 
 // ========================================
 // FINAL RESPONSE

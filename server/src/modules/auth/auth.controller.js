@@ -45,11 +45,11 @@ export const login = asyncHandler(async (req, res) => {
       "Login successful.",
       {
         user,
+        accessToken,
+        refreshToken,
       }
     )
-    
   )
-  
 })
 
 // Get CurrentUser

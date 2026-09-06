@@ -54,8 +54,13 @@ const groq = new Groq({
 // CONSTANTS
 // ========================================
 
-const MODEL =
-  "llama-3.3-70b-versatile";
+const CANDIDATE_MODELS = [
+  process.env.GROQ_MODEL,
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.6-27b",
+  "qwen/qwen3.8-27b",
+].filter(Boolean);
 
 const MAX_CONTEXT_ITEMS = 20;
 
@@ -3223,36 +3228,40 @@ ${userContext}
   // TOOL LOOP
   // ========================================
 
+  let currentModelIndex = 0;
+
   for (
     let iteration = 0;
     iteration < 5;
     iteration++
   ) {
+    let completion = null;
+    let lastError = null;
 
-    const completion =
-      await groq.chat.completions.create({
+    for (let m = currentModelIndex; m < CANDIDATE_MODELS.length; m++) {
+      try {
+        completion = await groq.chat.completions.create({
+          model: CANDIDATE_MODELS[m],
+          messages,
+          temperature: 0.3,
+          max_tokens: 600,
+          tools,
+          tool_choice: "auto",
+        });
+        currentModelIndex = m;
+        break;
+      } catch (err) {
+        lastError = err;
+        console.error(`Groq completion error [${CANDIDATE_MODELS[m]}]:`, err.message);
+      }
+    }
 
-        model:
-          MODEL,
+    if (!completion) {
+      throw lastError || new Error("Failed to generate response from AI model.");
+    }
 
-        messages,
-
-        temperature:
-          0.3,
-
-        max_tokens:
-          1000,
-
-        tools,
-
-        tool_choice:
-          "auto",
-
-      });
-
-
- const assistantMessage =
-  completion.choices?.[0]?.message;
+    const assistantMessage =
+      completion.choices?.[0]?.message;
 
 if (!assistantMessage) {
 

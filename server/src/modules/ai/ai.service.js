@@ -3138,13 +3138,13 @@ IMPORTANT TOOL RULES:
 
 26. Never expose internal tool names, database IDs, owner IDs, or implementation details unless explicitly requested.
 
-27. When the user asks to add, create, or save a contact (e.g. "Add a contact named Steve Jobs"), IMMEDIATELY call the `create_contact` tool using the name provided. Do NOT ask for optional fields like email or phone before calling the tool.
+27. When the user asks to add, create, or save a contact (e.g. "Add a contact named Steve Jobs"), IMMEDIATELY call the create_contact tool using the name provided. Do NOT ask for optional fields like email or phone before calling the tool.
 
-28. When the user asks to create, schedule, or book an appointment, IMMEDIATELY call `create_appointment`.
+28. When the user asks to create, schedule, or book an appointment, IMMEDIATELY call create_appointment.
 
-29. When the user asks to log or record a call, IMMEDIATELY call `create_call`.
+29. When the user asks to log or record a call, IMMEDIATELY call create_call.
 
-30. When the user asks to create or set a reminder, IMMEDIATELY call `create_reminder`.
+30. When the user asks to create or set a reminder, IMMEDIATELY call create_reminder.
 `;
 
 

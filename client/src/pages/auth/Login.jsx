@@ -27,11 +27,15 @@ const Login = () => {
     dispatch(loginStart());
     try {
       const response = await loginUser(data);
-      if (response?.success && response?.data?.user) {
-        if (response.data.accessToken) {
-          localStorage.setItem("accessToken", response.data.accessToken);
+      const payload = response?.data || response;
+      const token = payload?.accessToken || response?.accessToken;
+      const userObj = payload?.user || response?.user;
+
+      if (response?.success && userObj) {
+        if (token) {
+          localStorage.setItem("accessToken", token);
         }
-        dispatch(loginSuccess(response.data.user));
+        dispatch(loginSuccess(userObj));
         navigate("/dashboard");
       } else {
         const msg = response?.message || "Login failed. Please check your credentials.";

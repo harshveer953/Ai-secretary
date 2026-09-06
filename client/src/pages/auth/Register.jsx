@@ -40,11 +40,15 @@ const Register = () => {
         password: data.password,
       });
 
-      if (loginResponse?.success && loginResponse?.data?.user) {
-        if (loginResponse.data.accessToken) {
-          localStorage.setItem("accessToken", loginResponse.data.accessToken);
+      const payload = loginResponse?.data || loginResponse;
+      const token = payload?.accessToken || loginResponse?.accessToken;
+      const userObj = payload?.user || loginResponse?.user;
+
+      if (loginResponse?.success && userObj) {
+        if (token) {
+          localStorage.setItem("accessToken", token);
         }
-        dispatch(loginSuccess(loginResponse.data.user));
+        dispatch(loginSuccess(userObj));
         navigate("/dashboard");
       } else {
         // Fallback if auto-login returns to login screen
